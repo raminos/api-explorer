@@ -20,6 +20,7 @@ const input = {
       fields: [
         { name: "id", label: "ID", type: "integer", required: true, readOnly: true },
         { name: "title", label: "Title", type: "string", required: true, maxLength: 120 },
+        { name: "dueAt", label: "Due at", type: "datetime", required: false },
       ],
       operations: {
         list: { method: "GET", path: "/tasks", pagination: { type: "none" } },
@@ -40,5 +41,18 @@ it.effect("emits independently consumable backend and frontend layers", () =>
     expect(backend.find(({ path }) => path === "server/src/types.ts")?.contents).toContain(
       "interface Tasks",
     );
+    const title = ir.resources[0]?.fields[1];
+    expect(title).toBeDefined();
+    if (title !== undefined) {
+      expect(backendAdapter.units.renderFieldSchema(title)).toContain("Schema.maxLength(120)");
+    }
+    const dueAt = ir.resources[0]?.fields[2];
+    expect(dueAt).toBeDefined();
+    if (dueAt !== undefined) {
+      expect(backendAdapter.units.renderFieldSchema(dueAt)).toBe(
+        "Schema.optional(Schema.DateTimeUtc)",
+      );
+    }
+    expect(frontendAdapter.units.renderCreateUpdateForm()).toContain("switch (field.editor)");
   }).pipe(Effect.provide(Json.Default), Effect.provide(RegularExpression.Default)),
 );

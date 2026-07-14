@@ -1,4 +1,10 @@
-export type { AdapterCapabilities, GeneratedFile, GeneratorAdapter } from "./adapter.ts";
+export type {
+  AdapterCapabilities,
+  BackendAdapterUnits,
+  FrontendAdapterUnits,
+  GeneratedFile,
+  GeneratorAdapter,
+} from "./adapter.ts";
 export {
   completeCapabilities,
   defineAdapter,

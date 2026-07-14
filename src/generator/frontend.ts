@@ -1,8 +1,13 @@
 import { Effect } from "effect";
 import { GenerationError } from "../domain/errors.ts";
-import type { ApiIr } from "../ir/model.ts";
+import type { ApiIr, ResourceIr } from "../ir/model.ts";
 import { Json } from "../libraries/json.ts";
-import { completeCapabilities, defineAdapter, type GeneratedFile } from "./adapter.ts";
+import {
+  completeCapabilities,
+  defineAdapter,
+  type FrontendAdapterUnits,
+  type GeneratedFile,
+} from "./adapter.ts";
 import { renderInterface } from "./render.ts";
 
 const metadata = (api: ApiIr) =>
@@ -15,26 +20,53 @@ const metadata = (api: ApiIr) =>
     relationships,
   }));
 
-const apiClient = `const baseUrl = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
+const apiClient = `import { FetchHttpClient, HttpClient, HttpClientRequest } from "@effect/platform";
+import { Effect, Schema } from "effect";
+
+const baseUrl = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
+
+class ApiError extends Schema.TaggedError<ApiError>()("ApiError", {
+  status: Schema.Number,
+}) {}
+
+const execute = (request: HttpClientRequest.HttpClientRequest): Promise<unknown> =>
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    const response = yield* client.execute(request);
+    if (response.status < 200 || response.status >= 300) {
+      return yield* new ApiError({ status: response.status });
+    }
+    return yield* response.json;
+  }).pipe(Effect.provide(FetchHttpClient.layer), Effect.runPromise);
+
+const mutationRequest = (path: string, method: "POST" | "PATCH" | "DELETE", body?: unknown) =>
+  Effect.gen(function* () {
+    switch (method) {
+      case "POST":
+        return yield* HttpClientRequest.post(\`\${baseUrl}/\${path}\`).pipe(
+          HttpClientRequest.bodyJson(body),
+        );
+      case "PATCH":
+        return yield* HttpClientRequest.patch(\`\${baseUrl}/\${path}\`).pipe(
+          HttpClientRequest.bodyJson(body),
+        );
+      case "DELETE":
+        return HttpClientRequest.del(\`\${baseUrl}/\${path}\`);
+    }
+  });
+
+const mutate = (path: string, method: "POST" | "PATCH" | "DELETE", body?: unknown) =>
+  mutationRequest(path, method, body).pipe(
+    Effect.flatMap((request) => Effect.promise(() => execute(request))),
+    Effect.runPromise,
+  );
 
 export const api = {
-  list: (resource: string) => fetch(\`\${baseUrl}/\${resource}\`).then(assertOk),
-  get: (resource: string, id: string) => fetch(\`\${baseUrl}/\${resource}/\${id}\`).then(assertOk),
+  list: (resource: string) => execute(HttpClientRequest.get(\`\${baseUrl}/\${resource}\`)),
+  get: (resource: string, id: string) => execute(HttpClientRequest.get(\`\${baseUrl}/\${resource}/\${id}\`)),
   create: (resource: string, input: unknown) => mutate(resource, "POST", input),
   update: (resource: string, id: string, input: unknown) => mutate(\`\${resource}/\${id}\`, "PATCH", input),
   remove: (resource: string, id: string) => mutate(\`\${resource}/\${id}\`, "DELETE"),
-};
-
-const mutate = (path: string, method: string, body?: unknown) =>
-  fetch(\`\${baseUrl}/\${path}\`, {
-    method,
-    ...(body === undefined ? {} : { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
-  }).then(assertOk);
-
-const assertOk = async (response: Response): Promise<unknown> => {
-  const body: unknown = await response.json();
-  if (!response.ok) throw new Error(\`Request failed: \${response.status}\`);
-  return body;
 };
 `;
 
@@ -155,13 +187,28 @@ export function App() {
 
 const css = `:root{font-family:Inter,ui-sans-serif,system-ui;color:#172033;background:#f6f7fb}*{box-sizing:border-box}body{margin:0}.shell{display:grid;grid-template-columns:240px 1fr;min-height:100vh}aside{background:#111827;color:white;padding:28px 18px}.brand{font-size:20px;font-weight:750;margin:0 10px 32px}nav{display:grid;gap:6px}nav button{background:transparent;border:0;border-radius:8px;color:#9ca3af;padding:11px;text-align:left}nav button.active,nav button:hover{background:#263246;color:white}main{padding:48px;overflow:hidden}header{margin-bottom:24px}.eyebrow{color:#6366f1;font-weight:700;text-transform:uppercase;letter-spacing:.12em;font-size:12px}h1{font-size:36px;margin:4px 0}.card{background:white;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 1px 2px #0000000a;margin-bottom:24px}.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;padding:20px}.form label{display:grid;gap:7px;font-size:13px;font-weight:650}.form input,.form textarea,.form select{border:1px solid #d1d5db;border-radius:7px;padding:9px;font:inherit}.form button,button.danger,button.secondary{align-self:end;border:0;border-radius:7px;padding:10px 14px;background:#4f46e5;color:white}.form-actions,.actions{display:flex;gap:8px;align-items:end}.table-wrap{overflow:auto}table{border-collapse:collapse;width:100%;font-size:14px}th,td{border-bottom:1px solid #eee;padding:13px;text-align:left;max-width:280px}th{background:#fafafa;color:#6b7280;font-size:12px;text-transform:uppercase}button.danger{background:#fff1f2;color:#be123c;padding:6px 9px}button.secondary{background:#eef2ff;color:#3730a3;padding:6px 9px}@media(max-width:760px){.shell{grid-template-columns:1fr}aside{padding:16px}.brand{margin-bottom:12px}nav{display:flex;overflow:auto}main{padding:24px}}`;
 
+export const frontendUnits = {
+  renderDataTransfer: (resource: ResourceIr) => renderInterface(resource),
+  renderResourceMetadata: (api: ApiIr) =>
+    Effect.gen(function* () {
+      const json = yield* Json;
+      return yield* json.stringify(metadata(api), null, 2);
+    }),
+  renderApiClient: () => apiClient,
+  renderCreateUpdateForm: () => form,
+  renderResourceTable: () => table,
+  renderResourcePage: () => page,
+  renderApplication: () => app,
+} satisfies FrontendAdapterUnits;
+
 export const frontendAdapter = defineAdapter({
   name: "tanstack-react",
   capabilities: completeCapabilities,
+  units: frontendUnits,
   generate: (api) =>
     Effect.gen(function* () {
       const json = yield* Json;
-      const resourceMetadata = yield* json.stringify(metadata(api), null, 2);
+      const resourceMetadata = yield* frontendUnits.renderResourceMetadata(api);
       const packageJson = yield* json.stringify(
         {
           name: `${api.api.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-web`,
@@ -169,11 +216,13 @@ export const frontendAdapter = defineAdapter({
           type: "module",
           scripts: { dev: "vite", build: "tsc --noEmit && vite build" },
           dependencies: {
+            "@effect/platform": "0.97.0",
             "@tanstack/react-query": "5.83.0",
             "@vitejs/plugin-react": "4.6.0",
             vite: "7.0.4",
             react: "19.1.0",
             "react-dom": "19.1.0",
+            effect: "3.22.0",
           },
           devDependencies: {
             "@types/react": "19.1.8",
@@ -218,17 +267,26 @@ export const frontendAdapter = defineAdapter({
         },
         {
           path: "web/src/types.ts",
-          contents: `${api.resources.map(renderInterface).join("\n\n")}\n`,
+          contents: `${api.resources.map(frontendUnits.renderDataTransfer).join("\n\n")}\n`,
         },
         {
           path: "web/src/resources.ts",
           contents: `export interface ResourceDefinition {\n  readonly name: string;\n  readonly singularLabel: string;\n  readonly pluralLabel: string;\n  readonly idField: string;\n  readonly fields: ReadonlyArray<{ readonly name: string; readonly label: string; readonly kind: string; readonly editor: "text" | "textarea" | "markdown" | "richText" | "table" | "url" | "email" | "date" | "time" | "datetime" | "number" | "checkbox" | "select" | "resourceSelect"; readonly required: boolean; readonly readOnly: boolean; readonly referenceValueKind?: "string" | "integer"; readonly enumValues: ReadonlyArray<{ readonly value: string; readonly label: string }>; readonly [key: string]: unknown }>;\n  readonly relationships: ReadonlyArray<{ readonly name: string; readonly kind: "belongsTo" | "hasMany"; readonly resource: string; readonly localField: string; readonly foreignField: string }>;\n}\n\nexport const resources: ReadonlyArray<ResourceDefinition> = ${resourceMetadata};\n`,
         },
-        { path: "web/src/api.ts", contents: apiClient },
-        { path: "web/src/components/ResourceForm.tsx", contents: form },
-        { path: "web/src/components/ResourceTable.tsx", contents: table },
-        { path: "web/src/components/ResourcePage.tsx", contents: page },
-        { path: "web/src/App.tsx", contents: app },
+        { path: "web/src/api.ts", contents: frontendUnits.renderApiClient() },
+        {
+          path: "web/src/components/ResourceForm.tsx",
+          contents: frontendUnits.renderCreateUpdateForm(),
+        },
+        {
+          path: "web/src/components/ResourceTable.tsx",
+          contents: frontendUnits.renderResourceTable(),
+        },
+        {
+          path: "web/src/components/ResourcePage.tsx",
+          contents: frontendUnits.renderResourcePage(),
+        },
+        { path: "web/src/App.tsx", contents: frontendUnits.renderApplication() },
         { path: "web/src/styles.css", contents: css },
         {
           path: "web/src/main.tsx",

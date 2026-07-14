@@ -1,6 +1,7 @@
 import { Effect, ParseResult, Schema } from "effect";
 import { GenerationError } from "../domain/errors.ts";
-import type { ApiIr, EditorKind, FieldKind } from "../ir/model.ts";
+import type { ApiIr, EditorKind, FieldIr, FieldKind, ResourceIr } from "../ir/model.ts";
+import type { LibraryError } from "../libraries/errors.ts";
 import type { Json } from "../libraries/json.ts";
 
 export const GeneratedFileSchema = Schema.Struct({
@@ -15,9 +16,28 @@ export interface AdapterCapabilities {
   readonly editorKinds: Readonly<Record<EditorKind, true>>;
 }
 
+export interface BackendAdapterUnits {
+  readonly renderFieldSchema: (field: FieldIr) => string;
+  readonly renderDataModels: (api: ApiIr) => string;
+  readonly renderDataTransfer: (resource: ResourceIr) => string;
+  readonly renderEndpointManifest: (api: ApiIr) => Effect.Effect<string, LibraryError, Json>;
+  readonly renderTransport: (api: ApiIr) => string;
+}
+
+export interface FrontendAdapterUnits {
+  readonly renderDataTransfer: (resource: ResourceIr) => string;
+  readonly renderResourceMetadata: (api: ApiIr) => Effect.Effect<string, LibraryError, Json>;
+  readonly renderApiClient: () => string;
+  readonly renderCreateUpdateForm: () => string;
+  readonly renderResourceTable: () => string;
+  readonly renderResourcePage: () => string;
+  readonly renderApplication: () => string;
+}
+
 export interface GeneratorAdapter {
   readonly name: string;
   readonly capabilities: AdapterCapabilities;
+  readonly units: BackendAdapterUnits | FrontendAdapterUnits;
   readonly generate: (
     api: ApiIr,
   ) => Effect.Effect<ReadonlyArray<GeneratedFile>, GenerationError, Json>;
@@ -64,17 +84,18 @@ const decodeGeneratedFiles = Schema.decodeUnknown(Schema.Array(GeneratedFileSche
   onExcessProperty: "error",
 });
 
-export const defineAdapter = (adapter: GeneratorAdapter): GeneratorAdapter => ({
-  ...adapter,
-  generate: (api) =>
-    adapter.generate(api).pipe(
-      Effect.flatMap(decodeGeneratedFiles),
-      Effect.mapError((cause) => {
-        if (cause._tag === "GenerationError") return cause;
-        return new GenerationError({
-          message: `Adapter ${adapter.name} emitted invalid files: ${ParseResult.TreeFormatter.formatErrorSync(cause)}`,
-          cause,
-        });
-      }),
-    ),
-});
+export const defineAdapter = <Adapter extends GeneratorAdapter>(adapter: Adapter): Adapter =>
+  ({
+    ...adapter,
+    generate: (api) =>
+      adapter.generate(api).pipe(
+        Effect.flatMap(decodeGeneratedFiles),
+        Effect.mapError((cause) => {
+          if (cause._tag === "GenerationError") return cause;
+          return new GenerationError({
+            message: `Adapter ${adapter.name} emitted invalid files: ${ParseResult.TreeFormatter.formatErrorSync(cause)}`,
+            cause,
+          });
+        }),
+      ),
+  }) as Adapter;

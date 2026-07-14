@@ -1,8 +1,13 @@
 import { Effect, Schema } from "effect";
 import { GenerationError } from "../domain/errors.ts";
-import type { ApiIr, FieldIr } from "../ir/model.ts";
+import type { ApiIr, FieldIr, ResourceIr } from "../ir/model.ts";
 import { Json } from "../libraries/json.ts";
-import { completeCapabilities, defineAdapter, type GeneratedFile } from "./adapter.ts";
+import {
+  type BackendAdapterUnits,
+  completeCapabilities,
+  defineAdapter,
+  type GeneratedFile,
+} from "./adapter.ts";
 import { pascalCase, renderInterface } from "./render.ts";
 
 const quote = Schema.encodeSync(Schema.parseJson(Schema.String));
@@ -41,7 +46,7 @@ const schemaFor = (field: FieldIr): string => {
       schema = "Schema.String.pipe(Schema.pattern(/^\\d{2}:\\d{2}(?::\\d{2})?$/))";
       break;
     case "datetime":
-      schema = "Schema.String.pipe(Schema.pattern(/^\\d{4}-\\d{2}-\\d{2}T/))";
+      schema = "Schema.DateTimeUtc";
       break;
     case "string":
     case "markdown":
@@ -53,7 +58,9 @@ const schemaFor = (field: FieldIr): string => {
       if (field.constraints.maxLength !== undefined)
         filters.push(`Schema.maxLength(${field.constraints.maxLength})`);
       if (field.constraints.pattern !== undefined)
-        filters.push(`Schema.pattern(new RegExp(${quote(field.constraints.pattern)}))`);
+        filters.push(
+          `Schema.pattern(compileRegularExpression(${quote(field.constraints.pattern)}))`,
+        );
       schema = "Schema.String";
       if (filters.length > 0) schema = `${schema}.pipe(${filters.join(", ")})`;
     }
@@ -88,101 +95,132 @@ const renderSchemas = (api: ApiIr): string =>
 const renderAuth = (api: ApiIr): string => {
   const auth = api.api.auth;
   if (auth.type === "none") return "";
-  const readSecret = `const secret = Bun.env[${quote(auth.environmentVariable)}];\n    if (secret === undefined) return json({ error: ${quote(`Missing environment variable ${auth.environmentVariable}`)} }, 500);`;
+  const readSecret = `const secret = Redacted.value(yield* Config.redacted(${quote(auth.environmentVariable)}));`;
   if (auth.type === "bearer") {
-    return `${readSecret}\n    headers.set("authorization", \`Bearer \${secret}\`);`;
+    return `${readSecret}\n    clientRequest = HttpClientRequest.setHeader(clientRequest, "authorization", \`Bearer \${secret}\`);`;
   }
   if (auth.location === "header") {
-    return `${readSecret}\n    headers.set(${quote(auth.name)}, secret);`;
+    return `${readSecret}\n    clientRequest = HttpClientRequest.setHeader(clientRequest, ${quote(auth.name)}, secret);`;
   }
-  return `${readSecret}\n    target.searchParams.set(${quote(auth.name)}, secret);`;
+  return `${readSecret}\n    clientRequest = HttpClientRequest.setUrlParam(clientRequest, ${quote(auth.name)}, secret);`;
 };
 
-const server = (api: ApiIr): string => `import { Effect, Schema } from "effect";
+const server = (
+  api: ApiIr,
+): string => `import { FetchHttpClient, HttpClient, HttpClientRequest, HttpRouter, HttpServer, HttpServerRequest, HttpServerResponse } from "@effect/platform";
+import { BunHttpServer, BunRuntime } from "@effect/platform-bun";
+import { Config, Effect, Layer, Redacted, Schema } from "effect";
 import * as Models from "./models.ts";
 import { operations } from "./operations.ts";
+import { makeUrl } from "./libraries/url.ts";
 
 const upstream = ${quote(api.api.baseUrl)};
 
 const json = (value: unknown, status = 200) =>
-  Response.json(value, { status, headers: { "access-control-allow-origin": "*" } });
+  HttpServerResponse.json(value, {
+    status,
+    headers: { "access-control-allow-origin": "*" },
+  });
 
-const program = (request: Request) =>
+const handler =
   Effect.gen(function* () {
-    const url = new URL(request.url);
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const client = yield* HttpClient.HttpClient;
+    const url = yield* makeUrl(request.url, "http://localhost");
     const [, resourceName, id] = url.pathname.split("/");
-    if (resourceName === undefined) return json({ error: "Unknown resource" }, 404);
+    if (resourceName === undefined) return yield* json({ error: "Unknown resource" }, 404);
     const resource = operations[resourceName];
-    if (resource === undefined) return json({ error: "Unknown resource" }, 404);
+    if (resource === undefined) return yield* json({ error: "Unknown resource" }, 404);
 
     const operation = id === undefined || id === ""
       ? request.method === "GET" ? resource.list : request.method === "POST" ? resource.create : undefined
       : request.method === "GET" ? resource.get
         : request.method === "DELETE" ? resource.delete
         : request.method === "PATCH" || request.method === "PUT" ? resource.update : undefined;
-    if (operation === undefined) return json({ error: "Unsupported operation" }, 405);
+    if (operation === undefined) return yield* json({ error: "Unsupported operation" }, 405);
 
-    const inputPath = operation.path.replace("{id}", encodeURIComponent(id ?? ""));
-    const target = new URL(inputPath, upstream);
-    url.searchParams.forEach((value, key) => target.searchParams.set(key, value));
+    const inputPath = operation.path.replace("{id}", id ?? "");
+    const target = yield* makeUrl(inputPath, upstream);
+    let clientRequest = HttpClientRequest.make(operation.method)(target).pipe(
+      HttpClientRequest.setUrlParams(url.searchParams),
+    );
 
-    const headers = new Headers();
     ${renderAuth(api)}
 
-    let body: string | undefined;
     if (request.method !== "GET" && request.method !== "DELETE") {
-      const raw = yield* Effect.tryPromise(() => request.json());
+      const raw = yield* request.json;
       const schemaName = resourceName.slice(0, 1).toUpperCase() + resourceName.slice(1) + "Input";
       const schema = Models[schemaName as keyof typeof Models] as Schema.Schema<unknown, unknown, never> | undefined;
-      if (schema === undefined) return json({ error: "Missing input schema" }, 500);
+      if (schema === undefined) return yield* json({ error: "Missing input schema" }, 500);
       const validated = yield* Schema.decodeUnknown(schema)(raw, {
         errors: "all",
         onExcessProperty: "error",
       });
-      body = JSON.stringify(validated);
+      clientRequest = yield* HttpClientRequest.bodyJson(clientRequest, validated);
     }
 
-    const response = yield* Effect.tryPromise(() =>
-      fetch(target, {
-        method: operation.method,
-        ...(body === undefined
-          ? { headers }
-          : { headers: new Headers([...headers, ["content-type", "application/json"]]), body }),
-      }),
-    );
-    const payload = yield* Effect.tryPromise(() => response.json());
-    return json(payload, response.status);
+    const response = yield* client.execute(clientRequest);
+    const payload = yield* response.json;
+    return yield* json(payload, response.status);
   }).pipe(
-    Effect.catchAll((cause) => Effect.succeed(json({ error: String(cause) }, 400))),
+    Effect.tapError(Effect.logError),
+    Effect.catchAll(() => json({ error: "Request failed" }, 400)),
   );
 
-Bun.serve({
-  port: Number(Bun.env.PORT ?? 3001),
-  fetch: (request) => Effect.runPromise(program(request)),
-});
+const router = HttpRouter.empty.pipe(HttpRouter.all("/*", handler));
+const app = router.pipe(HttpServer.serve(), HttpServer.withLogAddress);
+const ServerLive = Layer.unwrapEffect(
+  Config.integer("PORT").pipe(
+    Config.withDefault(3001),
+    Effect.map((port) => BunHttpServer.layer({ port })),
+  ),
+);
 
-console.log("API Explorer server listening on http://localhost:" + (Bun.env.PORT ?? "3001"));
+BunRuntime.runMain(
+  Layer.launch(Layer.provide(app, Layer.merge(ServerLive, FetchHttpClient.layer))),
+);
 `;
 
-export const backendAdapter = defineAdapter({
-  name: "effect-bun",
-  capabilities: completeCapabilities,
-  generate: (api) =>
+export const backendUnits = {
+  renderFieldSchema: schemaFor,
+  renderDataModels: renderSchemas,
+  renderDataTransfer: (resource: ResourceIr) => renderInterface(resource),
+  renderEndpointManifest: (api: ApiIr) =>
     Effect.gen(function* () {
       const json = yield* Json;
-      const routes = yield* json.stringify(
+      return yield* json.stringify(
         Object.fromEntries(api.resources.map((resource) => [resource.name, resource.operations])),
         null,
         2,
       );
+    }),
+  renderTransport: server,
+} satisfies BackendAdapterUnits;
+
+export const backendAdapter = defineAdapter({
+  name: "effect-bun",
+  capabilities: completeCapabilities,
+  units: backendUnits,
+  generate: (api) =>
+    Effect.gen(function* () {
+      const json = yield* Json;
+      const routes = yield* backendUnits.renderEndpointManifest(api);
       const packageJson = yield* json.stringify(
         {
           name: `${api.api.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-server`,
           private: true,
           type: "module",
           scripts: { dev: "bun --watch src/server.ts", start: "bun src/server.ts" },
-          dependencies: { effect: "3.22.0" },
-          devDependencies: { "@types/bun": "1.3.6", typescript: "5.9.3" },
+          dependencies: {
+            "@effect/platform": "0.97.0",
+            "@effect/platform-bun": "0.91.0",
+            effect: "3.22.0",
+          },
+          devDependencies: {
+            "@types/bun": "1.3.14",
+            "@types/ws": "8.18.1",
+            typescript: "5.9.3",
+          },
         },
         null,
         2,
@@ -195,6 +233,7 @@ export const backendAdapter = defineAdapter({
             module: "Preserve",
             noEmit: true,
             noUncheckedIndexedAccess: true,
+            skipLibCheck: true,
             strict: true,
             target: "ES2024",
             types: ["bun"],
@@ -215,17 +254,25 @@ export const backendAdapter = defineAdapter({
         },
         {
           path: "server/src/models.ts",
-          contents: `import { Schema } from "effect";\n\n${renderSchemas(api)}\n`,
+          contents: `import { Schema } from "effect";\nimport { compileRegularExpression } from "./libraries/regular-expression.ts";\n\n${backendUnits.renderDataModels(api)}\n`,
         },
         {
           path: "server/src/types.ts",
-          contents: `${api.resources.map(renderInterface).join("\n\n")}\n`,
+          contents: `${api.resources.map(backendUnits.renderDataTransfer).join("\n\n")}\n`,
         },
         {
           path: "server/src/operations.ts",
-          contents: `interface Operation { readonly method: string; readonly path: string; readonly [key: string]: unknown }\nexport const operations: Record<string, Record<string, Operation | undefined>> = ${routes};\n`,
+          contents: `interface Operation { readonly method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"; readonly path: string; readonly [key: string]: unknown }\nexport const operations: Record<string, Record<string, Operation | undefined>> = ${routes};\n`,
         },
-        { path: "server/src/server.ts", contents: server(api) },
+        {
+          path: "server/src/libraries/url.ts",
+          contents: `import { Effect, Schema } from "effect";\n\nexport class UrlError extends Schema.TaggedError<UrlError>()("UrlError", { cause: Schema.Unknown }) {}\n\nexport const makeUrl = (...parameters: ConstructorParameters<typeof URL>) =>\n  Effect.try({\n    try: () => new URL(...parameters),\n    catch: (cause) => new UrlError({ cause }),\n  });\n`,
+        },
+        {
+          path: "server/src/libraries/regular-expression.ts",
+          contents: `import { Effect, Schema } from "effect";\n\nclass RegularExpressionError extends Schema.TaggedError<RegularExpressionError>()("RegularExpressionError", { cause: Schema.Unknown }) {}\n\nexport const compileRegularExpression = (...parameters: ConstructorParameters<typeof RegExp>): RegExp =>\n  Effect.runSync(Effect.try({\n    try: () => new RegExp(...parameters),\n    catch: (cause) => new RegularExpressionError({ cause }),\n  }));\n`,
+        },
+        { path: "server/src/server.ts", contents: backendUnits.renderTransport(api) },
       ] satisfies ReadonlyArray<GeneratedFile>;
     }).pipe(
       Effect.mapError(

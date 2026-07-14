@@ -16,8 +16,8 @@ it.effect("compiles the example contract through every built-in adapter", () =>
     const frontend = yield* frontendAdapter.generate(ir);
 
     expect(ir.resources.map(({ name }) => name)).toEqual(["users", "posts", "comments"]);
-    expect(backend).toHaveLength(6);
+    expect(backend).toHaveLength(8);
     expect(frontend).toHaveLength(12);
-    expect(new Set([...backend, ...frontend].map(({ path }) => path)).size).toBe(18);
+    expect(new Set([...backend, ...frontend].map(({ path }) => path)).size).toBe(20);
   }).pipe(Effect.provide(Json.Default), Effect.provide(RegularExpression.Default)),
 );
