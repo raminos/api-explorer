@@ -266,7 +266,7 @@ type Pagination =
   | { readonly type: "none"; readonly response: ResponseItems }
   | { readonly type: "offset"; readonly offsetParameter: string; readonly limitParameter: string; readonly defaultLimit: number; readonly response: ResponseItems & { readonly end: { readonly type: "shortPage" } | { readonly type: "totalItems"; readonly totalItemsPath: string } } }
   | { readonly type: "cursor"; readonly cursorParameter: string; readonly limitParameter: string; readonly nextCursorPath: string; readonly defaultLimit: number; readonly response: ResponseItems }
-  | { readonly type: "page"; readonly pageParameter: string; readonly sizeParameter: string; readonly defaultSize: number; readonly firstPage: number; readonly response: ResponseItems & { readonly totalPagesPath: string } };
+  | { readonly type: "page"; readonly pageParameter: string; readonly sizeParameter: string; readonly defaultSize: number; readonly firstPage: number; readonly response: ResponseItems & { readonly end: { readonly type: "shortPage" } | { readonly type: "totalPages"; readonly totalPagesPath: string } } };
 interface ListOperation extends Operation { readonly method: "GET"; readonly pagination: Pagination }
 interface SearchOperation extends ListOperation { readonly queryParameter: string }
 type Maybe<Value> = { readonly _id: "Option"; readonly _tag: "None" } | { readonly _id: "Option"; readonly _tag: "Some"; readonly value: Value }

@@ -1,8 +1,8 @@
 import { Schema } from "effect";
 
 const Identifier = Schema.String.pipe(
-  Schema.pattern(/^[a-z][a-zA-Z0-9]*$/),
-  Schema.annotations({ description: "A lower-camel-case identifier" }),
+  Schema.pattern(/^[a-z][a-zA-Z0-9_]*$/),
+  Schema.annotations({ description: "A lower-camel-case or snake_case identifier" }),
 );
 
 const CommonField = {
@@ -157,7 +157,13 @@ const PaginationSchema = Schema.Union(
     firstPage: Schema.Number.pipe(Schema.int(), Schema.nonNegative()),
     response: Schema.Struct({
       ...ResponseItemsSchema.fields,
-      totalPagesPath: Schema.NonEmptyTrimmedString,
+      end: Schema.Union(
+        Schema.Struct({ type: Schema.Literal("shortPage") }),
+        Schema.Struct({
+          type: Schema.Literal("totalPages"),
+          totalPagesPath: Schema.NonEmptyTrimmedString,
+        }),
+      ),
     }),
   }),
 );

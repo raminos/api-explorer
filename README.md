@@ -7,7 +7,7 @@ Generate a composable Effect/Bun API server and TanStack Query explorer from one
 
 API Explorer models resources, CRUD and search operations, authentication, pagination, relationships, validation constraints, and semantic UI types such as Markdown, HTML, CSV, enums, dates, and references. The contract is decoded with Effect Schema, compiled into a schema-validated IR, and rendered by exhaustive backend and frontend adapters.
 
-Start with the runnable [JSONPlaceholder contract](./examples/jsonplaceholder/api-explorer.json). The [showcase contract](./examples/showcase/api-explorer.json) demonstrates every supported field, header source, nullable value, array, and pagination strategy.
+Start with the runnable [Open Brewery DB contract](./examples/open-brewery-db/api-explorer.json), backed by the live community-maintained provider rather than a mock API. The [showcase contract](./examples/showcase/api-explorer.json) demonstrates every supported field, header source, nullable value, array, and pagination strategy.
 
 ## Start in under a minute
 
@@ -27,7 +27,7 @@ Generate and run the example:
 ```sh
 bun run generate:example
 
-cd .generated/jsonplaceholder/server
+cd .generated/open-brewery-db/server
 bun install
 bun run start
 ```
@@ -37,7 +37,7 @@ Generate the complete semantic showcase with `bun run generate:showcase`.
 In another terminal:
 
 ```sh
-cd .generated/jsonplaceholder/web
+cd .generated/open-brewery-db/web
 bun install
 bun run dev
 ```
@@ -54,9 +54,9 @@ api-explorer generate <contract> [--target all|server|web] \
 During development, invoke the source entrypoint directly:
 
 ```sh
-bun run src/cli.ts generate examples/jsonplaceholder/api-explorer.json \
+bun run src/cli.ts generate examples/open-brewery-db/api-explorer.json \
   --target all \
-  --output .generated/jsonplaceholder
+  --output .generated/open-brewery-db
 ```
 
 Every argument and option is parsed by Effect CLI and decoded again through the application input schema. Unknown targets, blank paths, malformed contracts, unknown JSON properties, invalid relationships, and unsupported adapter variants fail explicitly.
@@ -68,7 +68,7 @@ Backend and frontend adapters are independent, mix-and-match flavors that implem
 | Target | Independently consumable output |
 | --- | --- |
 | Effect/Bun server | schemas, transfer types, operation manifest, library boundaries, transport, server entrypoint |
-| TanStack web app | runtime schemas, transfer types, resource metadata, Effect HTTP client, semantic forms, tables, pagination, resource page, application shell |
+| TanStack/shadcn web app | `components.json`, source-owned shadcn primitives, Tailwind theme tokens, runtime schemas, transfer types, Effect HTTP client, semantic forms, tables, pagination, resource page, application shell |
 
 Use a complete generated application or take only the types, schemas, client, form, table, or page needed by an existing project.
 

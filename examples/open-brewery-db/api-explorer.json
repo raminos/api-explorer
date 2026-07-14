@@ -1,0 +1,152 @@
+{
+  "schemaVersion": "1.0",
+  "api": {
+    "name": "Open Brewery DB",
+    "description": "A live, community-maintained directory of breweries, cideries, brewpubs, and bottleshops.",
+    "baseUrl": "https://api.openbrewerydb.org",
+    "auth": { "type": "none" },
+    "headers": [{ "name": "accept", "source": "literal", "value": "application/json" }]
+  },
+  "resources": [
+    {
+      "name": "breweries",
+      "singularLabel": "Brewery",
+      "pluralLabel": "Breweries",
+      "idField": "id",
+      "fields": [
+        { "name": "id", "label": "ID", "type": "string", "required": true, "readOnly": true },
+        {
+          "name": "name",
+          "label": "Brewery",
+          "type": "string",
+          "required": true,
+          "readOnly": true,
+          "minLength": 1
+        },
+        {
+          "name": "brewery_type",
+          "label": "Type",
+          "type": "enum",
+          "required": true,
+          "readOnly": true,
+          "values": [
+            { "value": "micro", "label": "Micro" },
+            { "value": "nano", "label": "Nano" },
+            { "value": "taproom", "label": "Taproom" },
+            { "value": "cidery", "label": "Cidery" },
+            { "value": "regional", "label": "Regional" },
+            { "value": "brewpub", "label": "Brewpub" },
+            { "value": "large", "label": "Large" },
+            { "value": "planning", "label": "Planning" },
+            { "value": "bar", "label": "Bar" },
+            { "value": "contract", "label": "Contract" },
+            { "value": "proprietor", "label": "Proprietor" },
+            { "value": "closed", "label": "Closed" }
+          ]
+        },
+        {
+          "name": "website_url",
+          "label": "Website",
+          "type": "url",
+          "required": true,
+          "readOnly": true,
+          "nullable": true
+        },
+        {
+          "name": "phone",
+          "label": "Phone",
+          "type": "phone",
+          "required": true,
+          "readOnly": true,
+          "nullable": true
+        },
+        {
+          "name": "address_1",
+          "label": "Address",
+          "type": "string",
+          "required": true,
+          "readOnly": true,
+          "nullable": true
+        },
+        { "name": "city", "label": "City", "type": "string", "required": true, "readOnly": true },
+        {
+          "name": "state_province",
+          "label": "State / province",
+          "type": "string",
+          "required": true,
+          "readOnly": true
+        },
+        {
+          "name": "postal_code",
+          "label": "Postal code",
+          "type": "string",
+          "required": true,
+          "readOnly": true
+        },
+        {
+          "name": "country",
+          "label": "Country",
+          "type": "string",
+          "required": true,
+          "readOnly": true
+        },
+        {
+          "name": "longitude",
+          "label": "Longitude",
+          "type": "number",
+          "required": true,
+          "readOnly": true,
+          "nullable": true
+        },
+        {
+          "name": "latitude",
+          "label": "Latitude",
+          "type": "number",
+          "required": true,
+          "readOnly": true,
+          "nullable": true
+        },
+        {
+          "name": "address_2",
+          "label": "Address line 2",
+          "type": "string",
+          "required": true,
+          "readOnly": true,
+          "nullable": true
+        },
+        {
+          "name": "address_3",
+          "label": "Address line 3",
+          "type": "string",
+          "required": true,
+          "readOnly": true,
+          "nullable": true
+        },
+        { "name": "state", "label": "State", "type": "string", "required": true, "readOnly": true },
+        {
+          "name": "street",
+          "label": "Street",
+          "type": "string",
+          "required": true,
+          "readOnly": true,
+          "nullable": true
+        }
+      ],
+      "operations": {
+        "list": {
+          "method": "GET",
+          "path": "/v1/breweries",
+          "pagination": {
+            "type": "page",
+            "pageParameter": "page",
+            "sizeParameter": "per_page",
+            "defaultSize": 20,
+            "firstPage": 1,
+            "response": { "itemsPath": "$", "end": { "type": "shortPage" } }
+          }
+        },
+        "get": { "method": "GET", "path": "/v1/breweries/{id}" }
+      }
+    }
+  ]
+}

@@ -138,7 +138,13 @@ export const PaginationIrSchema = Schema.Union(
     sizeParameter: Schema.String,
     defaultSize: Schema.Number.pipe(Schema.int(), Schema.positive()),
     firstPage: Schema.Number.pipe(Schema.int(), Schema.nonNegative()),
-    response: Schema.Struct({ itemsPath: Schema.String, totalPagesPath: Schema.String }),
+    response: Schema.Struct({
+      itemsPath: Schema.String,
+      end: Schema.Union(
+        Schema.Struct({ type: Schema.Literal("shortPage") }),
+        Schema.Struct({ type: Schema.Literal("totalPages"), totalPagesPath: Schema.String }),
+      ),
+    }),
   }),
 );
 export type PaginationIr = typeof PaginationIrSchema.Type;

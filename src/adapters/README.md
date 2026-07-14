@@ -4,7 +4,7 @@ This directory contains stack-aware code. The CLI, compiler, registry, and gener
 
 ```text
 backend/effect-bun/          Effect HTTP and Bun backend flavor
-frontend/tanstack-shadcn/    TanStack Query and ShadCN-style React flavor
+frontend/tanstack-shadcn/    TanStack Query with source-owned shadcn/ui primitives
 shared/                      Explicit helpers shared by compatible built-ins
 index.ts                     The only built-in registration list
 ```

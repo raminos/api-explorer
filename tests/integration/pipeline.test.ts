@@ -1,7 +1,7 @@
 import { it } from "@effect/vitest";
 import { Effect, Array as EffectArray, Option } from "effect";
 import { expect } from "vitest";
-import exampleContract from "../../examples/jsonplaceholder/api-explorer.json";
+import exampleContract from "../../examples/open-brewery-db/api-explorer.json";
 import showcaseContract from "../../examples/showcase/api-explorer.json";
 import { backendAdapter } from "../../src/adapters/backend/effect-bun/adapter.ts";
 import { frontendAdapter } from "../../src/adapters/frontend/tanstack-shadcn/adapter.ts";
@@ -16,10 +16,12 @@ it.effect("compiles the example contract through every built-in adapter", () =>
     const backend = yield* backendAdapter.generate(ir);
     const frontend = yield* frontendAdapter.generate(ir);
 
-    expect(ir.resources.map(({ name }) => name)).toEqual(["users", "posts", "comments"]);
+    expect(ir.resources.map(({ name }) => name)).toEqual(["breweries"]);
     expect(backend).toHaveLength(8);
-    expect(frontend).toHaveLength(14);
-    expect(new Set([...backend, ...frontend].map(({ path }) => path)).size).toBe(22);
+    expect(frontend).toHaveLength(26);
+    expect(new Set([...backend, ...frontend].map(({ path }) => path)).size).toBe(34);
+    expect(frontend.map(({ path }) => path)).toContain("web/components.json");
+    expect(frontend.map(({ path }) => path)).toContain("web/src/components/ui/button.tsx");
   }).pipe(Effect.provide(Json.Default), Effect.provide(RegularExpression.Default)),
 );
 
@@ -57,7 +59,7 @@ it.effect("preserves strict field, header, and pagination intent through every a
       Option.some(expect.stringContaining('Config.redacted("SHOWCASE_TENANT_TOKEN")')),
     );
     expect(Option.map(browserApi, ({ contents }) => contents)).toEqual(
-      Option.some(expect.stringContaining("API response failed schema validation")),
+      Option.some(expect.stringContaining("does not match the declared contract")),
     );
     expect(Option.map(page, ({ contents }) => contents)).toEqual(
       Option.some(expect.stringContaining("Load more")),

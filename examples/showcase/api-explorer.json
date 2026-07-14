@@ -203,7 +203,10 @@
             "sizeParameter": "pageSize",
             "defaultSize": 20,
             "firstPage": 1,
-            "response": { "itemsPath": "$.data", "totalPagesPath": "$.page.totalPages" }
+            "response": {
+              "itemsPath": "$.data",
+              "end": { "type": "totalPages", "totalPagesPath": "$.page.totalPages" }
+            }
           }
         }
       }

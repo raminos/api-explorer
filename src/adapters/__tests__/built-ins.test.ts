@@ -54,6 +54,8 @@ it.effect("emits independently consumable backend and frontend layers", () =>
     expect(backend.map(({ path }) => path)).toContain("server/src/models.ts");
     expect(backend.map(({ path }) => path)).toContain("server/src/server.ts");
     expect(frontend.map(({ path }) => path)).toContain("web/src/components/ResourceForm.tsx");
+    expect(frontend.map(({ path }) => path)).toContain("web/src/components/ui/table.tsx");
+    expect(frontend.map(({ path }) => path)).toContain("web/components.json");
     expect(frontend.map(({ path }) => path)).toContain("web/src/App.tsx");
     const typesFile = EffectArray.findFirst(backend, ({ path }) => path === "server/src/types.ts");
     expect(Option.map(typesFile, ({ contents }) => contents)).toEqual(

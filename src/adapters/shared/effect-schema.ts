@@ -26,7 +26,7 @@ const arrayElementSchema = (field: FieldIr): string =>
         case "email":
           return "Schema.String.pipe(Schema.pattern(/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/))";
         case "phone":
-          return "Schema.String.pipe(Schema.pattern(/^\\+?[1-9]\\d{6,14}$/))";
+          return "Schema.String.pipe(Schema.pattern(/^\\+?[0-9][0-9 ()-]{5,24}$/))";
         case "uuid":
           return "Schema.String.pipe(Schema.pattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i))";
         case "string":
@@ -77,7 +77,7 @@ export const renderFieldSchema = (field: FieldIr): string => {
       schema = "Schema.String.pipe(Schema.pattern(/^https?:\\/\\//))";
       break;
     case "phone":
-      schema = "Schema.String.pipe(Schema.pattern(/^\\+?[1-9]\\d{6,14}$/))";
+      schema = "Schema.String.pipe(Schema.pattern(/^\\+?[0-9][0-9 ()-]{5,24}$/))";
       break;
     case "uuid":
       schema =

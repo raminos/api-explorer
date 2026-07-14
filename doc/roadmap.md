@@ -11,7 +11,7 @@
 ## 0.3 — richer explorer UI
 
 - TanStack Router/Start application target
-- ShadCN component extraction with accessible rich editors
+- Accessible rich editors built on the generated shadcn component layer
 - Relationship browsing, filters, optimistic updates, and update dialogs
 - Markdown/HTML sanitization and CSV table editing
 

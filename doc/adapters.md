@@ -44,6 +44,8 @@ Add built-ins to `src/adapters/index.ts`. The registry validates unique IDs and 
 
 Backend and frontend implementations are mixable because both declare an [explorer JSON protocol](./explorer-protocol.md), not because the core understands either generated stack.
 
+The built-in `tanstack-shadcn` flavor emits shadcn components as owned source files under `components/ui`, together with `components.json`, Tailwind CSS variables, and the dependencies those components actually use. It does not imitate shadcn with a monolithic stylesheet. Generated operation metadata also controls the UI: read-only providers do not receive create, edit, or delete controls.
+
 ## Failure policy
 
 There are no generic renderers or implicit fallbacks. Adding a contract field kind, frontend editor kind, contract version, or protocol version breaks exhaustive capabilities until each adapter explicitly supports it. Unsupported adapter IDs, invalid metadata, unsafe paths, invalid files, and collisions fail generation.
