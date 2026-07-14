@@ -1,0 +1,227 @@
+{
+  "schemaVersion": "1.0",
+  "api": {
+    "name": "JSONPlaceholder",
+    "description": "A deterministic example of related REST resources. Writes are simulated by the upstream service.",
+    "baseUrl": "https://jsonplaceholder.typicode.com",
+    "auth": { "type": "none" }
+  },
+  "resources": [
+    {
+      "name": "users",
+      "singularLabel": "User",
+      "pluralLabel": "Users",
+      "idField": "id",
+      "fields": [
+        {
+          "name": "id",
+          "label": "ID",
+          "type": "integer",
+          "required": true,
+          "readOnly": true,
+          "minimum": 1
+        },
+        {
+          "name": "name",
+          "label": "Name",
+          "type": "string",
+          "required": true,
+          "minLength": 1,
+          "maxLength": 100
+        },
+        {
+          "name": "username",
+          "label": "Username",
+          "type": "string",
+          "required": true,
+          "minLength": 1,
+          "maxLength": 50
+        },
+        { "name": "email", "label": "Email", "type": "email", "required": true },
+        { "name": "website", "label": "Website", "type": "url", "required": false },
+        {
+          "name": "status",
+          "label": "Status",
+          "type": "enum",
+          "required": false,
+          "values": [
+            { "value": "active", "label": "Active" },
+            { "value": "inactive", "label": "Inactive" }
+          ]
+        }
+      ],
+      "operations": {
+        "list": { "method": "GET", "path": "/users", "pagination": { "type": "none" } },
+        "get": { "method": "GET", "path": "/users/{id}" },
+        "create": { "method": "POST", "path": "/users" },
+        "update": { "method": "PATCH", "path": "/users/{id}" },
+        "delete": { "method": "DELETE", "path": "/users/{id}" },
+        "search": {
+          "method": "GET",
+          "path": "/users",
+          "queryParameter": "username",
+          "pagination": { "type": "none" }
+        }
+      },
+      "relationships": [
+        {
+          "name": "posts",
+          "kind": "hasMany",
+          "resource": "posts",
+          "localField": "id",
+          "foreignField": "userId"
+        }
+      ]
+    },
+    {
+      "name": "posts",
+      "singularLabel": "Post",
+      "pluralLabel": "Posts",
+      "idField": "id",
+      "fields": [
+        {
+          "name": "id",
+          "label": "ID",
+          "type": "integer",
+          "required": true,
+          "readOnly": true,
+          "minimum": 1
+        },
+        {
+          "name": "userId",
+          "label": "Author",
+          "type": "reference",
+          "resource": "users",
+          "valueType": "integer",
+          "required": true
+        },
+        {
+          "name": "title",
+          "label": "Title",
+          "type": "string",
+          "required": true,
+          "minLength": 1,
+          "maxLength": 160
+        },
+        {
+          "name": "body",
+          "label": "Body",
+          "description": "Long-form post content",
+          "type": "markdown",
+          "required": true,
+          "minLength": 1,
+          "maxLength": 10000,
+          "multiline": true
+        }
+      ],
+      "operations": {
+        "list": {
+          "method": "GET",
+          "path": "/posts",
+          "pagination": {
+            "type": "offset",
+            "offsetParameter": "_start",
+            "limitParameter": "_limit",
+            "defaultLimit": 20
+          }
+        },
+        "get": { "method": "GET", "path": "/posts/{id}" },
+        "create": { "method": "POST", "path": "/posts" },
+        "update": { "method": "PATCH", "path": "/posts/{id}" },
+        "delete": { "method": "DELETE", "path": "/posts/{id}" },
+        "search": {
+          "method": "GET",
+          "path": "/posts",
+          "queryParameter": "q",
+          "pagination": {
+            "type": "offset",
+            "offsetParameter": "_start",
+            "limitParameter": "_limit",
+            "defaultLimit": 20
+          }
+        }
+      },
+      "relationships": [
+        {
+          "name": "author",
+          "kind": "belongsTo",
+          "resource": "users",
+          "localField": "userId",
+          "foreignField": "id"
+        },
+        {
+          "name": "comments",
+          "kind": "hasMany",
+          "resource": "comments",
+          "localField": "id",
+          "foreignField": "postId"
+        }
+      ]
+    },
+    {
+      "name": "comments",
+      "singularLabel": "Comment",
+      "pluralLabel": "Comments",
+      "idField": "id",
+      "fields": [
+        {
+          "name": "id",
+          "label": "ID",
+          "type": "integer",
+          "required": true,
+          "readOnly": true,
+          "minimum": 1
+        },
+        {
+          "name": "postId",
+          "label": "Post",
+          "type": "reference",
+          "resource": "posts",
+          "valueType": "integer",
+          "required": true
+        },
+        {
+          "name": "name",
+          "label": "Subject",
+          "type": "string",
+          "required": true,
+          "maxLength": 160
+        },
+        { "name": "email", "label": "Email", "type": "email", "required": true },
+        {
+          "name": "body",
+          "label": "Comment",
+          "type": "string",
+          "required": true,
+          "maxLength": 5000,
+          "multiline": true
+        }
+      ],
+      "operations": {
+        "list": {
+          "method": "GET",
+          "path": "/comments",
+          "pagination": {
+            "type": "page",
+            "pageParameter": "_page",
+            "sizeParameter": "_limit",
+            "defaultSize": 25
+          }
+        },
+        "get": { "method": "GET", "path": "/comments/{id}" },
+        "create": { "method": "POST", "path": "/comments" },
+        "update": { "method": "PATCH", "path": "/comments/{id}" },
+        "delete": { "method": "DELETE", "path": "/comments/{id}" }
+      },
+      "relationships": [
+        {
+          "name": "post",
+          "kind": "belongsTo",
+          "resource": "posts",
+          "localField": "postId",
+          "foreignField": "id"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/aquaproj/aqua/main/json-schema/aqua-yaml.json
+registries:
+  - type: standard
+    ref: v4.447.0
+packages:
+  - name: oven-sh/bun@bun-v1.3.13
+  - name: biomejs/biome@@biomejs/biome@2.5.3

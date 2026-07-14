@@ -1,0 +1,8 @@
+.DS_Store
+.aqua/
+.env
+.generated/
+coverage/
+node_modules/
+dist/
+*.log
