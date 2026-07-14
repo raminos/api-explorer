@@ -8,3 +8,15 @@ export type {
   PaginationIr,
   ResourceIr,
 } from "./model.ts";
+export {
+  ApiIrSchema,
+  AuthIrSchema,
+  EditorKindSchema,
+  FieldConstraintsSchema,
+  FieldIrSchema,
+  FieldKindSchema,
+  OperationIrSchema,
+  PaginationIrSchema,
+  RelationshipIrSchema,
+  ResourceIrSchema,
+} from "./model.ts";

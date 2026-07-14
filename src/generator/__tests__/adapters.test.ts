@@ -3,6 +3,8 @@ import { Effect } from "effect";
 import { expect } from "vitest";
 import { parseContract } from "../../contract/parse.ts";
 import { compileContract } from "../../ir/compile.ts";
+import { Json } from "../../libraries/json.ts";
+import { RegularExpression } from "../../libraries/regular-expression.ts";
 import { backendAdapter } from "../backend.ts";
 import { frontendAdapter } from "../frontend.ts";
 
@@ -38,5 +40,5 @@ it.effect("emits independently consumable backend and frontend layers", () =>
     expect(backend.find(({ path }) => path === "server/src/types.ts")?.contents).toContain(
       "interface Tasks",
     );
-  }),
+  }).pipe(Effect.provide(Json.Default), Effect.provide(RegularExpression.Default)),
 );

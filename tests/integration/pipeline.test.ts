@@ -6,6 +6,7 @@ import { parseContract } from "../../src/contract/parse.ts";
 import { backendAdapter } from "../../src/generator/backend.ts";
 import { frontendAdapter } from "../../src/generator/frontend.ts";
 import { compileContract } from "../../src/ir/compile.ts";
+import { Json } from "../../src/libraries/json.ts";
 import { RegularExpression } from "../../src/libraries/regular-expression.ts";
 
 it.effect("compiles the example contract through every built-in adapter", () =>
@@ -18,5 +19,5 @@ it.effect("compiles the example contract through every built-in adapter", () =>
     expect(backend).toHaveLength(6);
     expect(frontend).toHaveLength(12);
     expect(new Set([...backend, ...frontend].map(({ path }) => path)).size).toBe(18);
-  }).pipe(Effect.provide(RegularExpression.Default)),
+  }).pipe(Effect.provide(Json.Default), Effect.provide(RegularExpression.Default)),
 );

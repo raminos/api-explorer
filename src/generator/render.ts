@@ -1,4 +1,7 @@
+import { Schema } from "effect";
 import type { FieldIr, ResourceIr } from "../ir/model.ts";
+
+const quote = Schema.encodeSync(Schema.parseJson(Schema.String));
 
 export const pascalCase = (value: string): string =>
   value
@@ -18,8 +21,16 @@ const baseType = (field: FieldIr): string => {
     case "reference":
       return field.referenceValueKind === "integer" ? "number" : "string";
     case "enum":
-      return field.enumValues.map(({ value }) => JSON.stringify(value)).join(" | ");
-    default:
+      return field.enumValues.map(({ value }) => quote(value)).join(" | ");
+    case "string":
+    case "markdown":
+    case "html":
+    case "csv":
+    case "url":
+    case "email":
+    case "date":
+    case "time":
+    case "datetime":
       return "string";
   }
 };

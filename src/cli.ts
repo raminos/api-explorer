@@ -2,12 +2,8 @@
 import { Args, Command, Options } from "@effect/cli";
 import { BunContext, BunRuntime } from "@effect/platform-bun";
 import { Console, Effect } from "effect";
-import { readContract } from "./contract/parse.ts";
-import { backendAdapter } from "./generator/backend.ts";
-import { frontendAdapter } from "./generator/frontend.ts";
-import { writeGeneratedFiles } from "./generator/write.ts";
-import { compileContract } from "./ir/compile.ts";
-import { RegularExpression } from "./libraries/regular-expression.ts";
+import { GenerateProject } from "./application/generate-project.ts";
+import { Json } from "./libraries/json.ts";
 
 const contractPath = Args.text({ name: "contract" });
 const output = Options.text("output").pipe(
@@ -24,17 +20,8 @@ const generate = Command.make(
   { contractPath, output, target },
   ({ contractPath, output, target }) =>
     Effect.gen(function* () {
-      const contract = yield* readContract(contractPath);
-      const ir = yield* compileContract(contract);
-      const adapters =
-        target === "server"
-          ? [backendAdapter]
-          : target === "web"
-            ? [frontendAdapter]
-            : [backendAdapter, frontendAdapter];
-      const groups = yield* Effect.forEach(adapters, (adapter) => adapter.generate(ir));
-      const files = groups.flat();
-      const count = yield* writeGeneratedFiles(output, files);
+      const generateProject = yield* GenerateProject;
+      const count = yield* generateProject.execute({ contractPath, output, target });
       yield* Console.log(`Generated ${count} files in ${output}`);
     }),
 );
@@ -50,7 +37,8 @@ const cli = Command.run(command, { name: "API Explorer", version: "0.1.0" });
 
 BunRuntime.runMain(
   cli(process.argv).pipe(
-    Effect.provide(RegularExpression.Default),
+    Effect.provide(Json.Default),
+    Effect.provide(GenerateProject.Default),
     Effect.provide(BunContext.layer),
   ),
 );

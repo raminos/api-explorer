@@ -1,7 +1,11 @@
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
+import { GenerationError } from "../domain/errors.ts";
 import type { ApiIr, FieldIr } from "../ir/model.ts";
-import type { GeneratedFile, GeneratorAdapter } from "./adapter.ts";
+import { Json } from "../libraries/json.ts";
+import { completeCapabilities, defineAdapter, type GeneratedFile } from "./adapter.ts";
 import { pascalCase, renderInterface } from "./render.ts";
+
+const quote = Schema.encodeSync(Schema.parseJson(Schema.String));
 
 const schemaFor = (field: FieldIr): string => {
   let schema: string;
@@ -22,7 +26,7 @@ const schemaFor = (field: FieldIr): string => {
           : "Schema.String";
       break;
     case "enum":
-      schema = `Schema.Literal(${field.enumValues.map(({ value }) => JSON.stringify(value)).join(", ")})`;
+      schema = `Schema.Literal(${field.enumValues.map(({ value }) => quote(value)).join(", ")})`;
       break;
     case "email":
       schema = "Schema.String.pipe(Schema.pattern(/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/))";
@@ -39,14 +43,17 @@ const schemaFor = (field: FieldIr): string => {
     case "datetime":
       schema = "Schema.String.pipe(Schema.pattern(/^\\d{4}-\\d{2}-\\d{2}T/))";
       break;
-    default: {
+    case "string":
+    case "markdown":
+    case "html":
+    case "csv": {
       const filters: Array<string> = [];
       if (field.constraints.minLength !== undefined)
         filters.push(`Schema.minLength(${field.constraints.minLength})`);
       if (field.constraints.maxLength !== undefined)
         filters.push(`Schema.maxLength(${field.constraints.maxLength})`);
       if (field.constraints.pattern !== undefined)
-        filters.push(`Schema.pattern(new RegExp(${JSON.stringify(field.constraints.pattern)}))`);
+        filters.push(`Schema.pattern(new RegExp(${quote(field.constraints.pattern)}))`);
       schema = "Schema.String";
       if (filters.length > 0) schema = `${schema}.pipe(${filters.join(", ")})`;
     }
@@ -78,31 +85,24 @@ const renderSchemas = (api: ApiIr): string =>
     })
     .join("\n\n");
 
-const renderRoutes = (api: ApiIr): string =>
-  JSON.stringify(
-    Object.fromEntries(api.resources.map((resource) => [resource.name, resource.operations])),
-    null,
-    2,
-  );
-
 const renderAuth = (api: ApiIr): string => {
   const auth = api.api.auth;
   if (auth.type === "none") return "";
-  const readSecret = `const secret = Bun.env[${JSON.stringify(auth.environmentVariable)}];\n    if (secret === undefined) return json({ error: ${JSON.stringify(`Missing environment variable ${auth.environmentVariable}`)} }, 500);`;
+  const readSecret = `const secret = Bun.env[${quote(auth.environmentVariable)}];\n    if (secret === undefined) return json({ error: ${quote(`Missing environment variable ${auth.environmentVariable}`)} }, 500);`;
   if (auth.type === "bearer") {
     return `${readSecret}\n    headers.set("authorization", \`Bearer \${secret}\`);`;
   }
   if (auth.location === "header") {
-    return `${readSecret}\n    headers.set(${JSON.stringify(auth.name)}, secret);`;
+    return `${readSecret}\n    headers.set(${quote(auth.name)}, secret);`;
   }
-  return `${readSecret}\n    target.searchParams.set(${JSON.stringify(auth.name)}, secret);`;
+  return `${readSecret}\n    target.searchParams.set(${quote(auth.name)}, secret);`;
 };
 
 const server = (api: ApiIr): string => `import { Effect, Schema } from "effect";
 import * as Models from "./models.ts";
 import { operations } from "./operations.ts";
 
-const upstream = ${JSON.stringify(api.api.baseUrl)};
+const upstream = ${quote(api.api.baseUrl)};
 
 const json = (value: unknown, status = 200) =>
   Response.json(value, { status, headers: { "access-control-allow-origin": "*" } });
@@ -164,57 +164,72 @@ Bun.serve({
 console.log("API Explorer server listening on http://localhost:" + (Bun.env.PORT ?? "3001"));
 `;
 
-export const backendAdapter: GeneratorAdapter = {
+export const backendAdapter = defineAdapter({
   name: "effect-bun",
+  capabilities: completeCapabilities,
   generate: (api) =>
-    Effect.succeed<ReadonlyArray<GeneratedFile>>([
-      {
-        path: "server/package.json",
-        contents: `${JSON.stringify(
-          {
-            name: `${api.api.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-server`,
-            private: true,
-            type: "module",
-            scripts: { dev: "bun --watch src/server.ts", start: "bun src/server.ts" },
-            dependencies: { effect: "3.22.0" },
-            devDependencies: { "@types/bun": "1.3.6", typescript: "5.9.3" },
+    Effect.gen(function* () {
+      const json = yield* Json;
+      const routes = yield* json.stringify(
+        Object.fromEntries(api.resources.map((resource) => [resource.name, resource.operations])),
+        null,
+        2,
+      );
+      const packageJson = yield* json.stringify(
+        {
+          name: `${api.api.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-server`,
+          private: true,
+          type: "module",
+          scripts: { dev: "bun --watch src/server.ts", start: "bun src/server.ts" },
+          dependencies: { effect: "3.22.0" },
+          devDependencies: { "@types/bun": "1.3.6", typescript: "5.9.3" },
+        },
+        null,
+        2,
+      );
+      const tsconfig = yield* json.stringify(
+        {
+          compilerOptions: {
+            allowImportingTsExtensions: true,
+            exactOptionalPropertyTypes: true,
+            module: "Preserve",
+            noEmit: true,
+            noUncheckedIndexedAccess: true,
+            strict: true,
+            target: "ES2024",
+            types: ["bun"],
           },
-          null,
-          2,
-        )}\n`,
-      },
-      {
-        path: "server/tsconfig.json",
-        contents: `${JSON.stringify(
-          {
-            compilerOptions: {
-              allowImportingTsExtensions: true,
-              exactOptionalPropertyTypes: true,
-              module: "Preserve",
-              noEmit: true,
-              noUncheckedIndexedAccess: true,
-              strict: true,
-              target: "ES2024",
-              types: ["bun"],
-            },
-            include: ["src"],
-          },
-          null,
-          2,
-        )}\n`,
-      },
-      {
-        path: "server/src/models.ts",
-        contents: `import { Schema } from "effect";\n\n${renderSchemas(api)}\n`,
-      },
-      {
-        path: "server/src/types.ts",
-        contents: `${api.resources.map(renderInterface).join("\n\n")}\n`,
-      },
-      {
-        path: "server/src/operations.ts",
-        contents: `interface Operation { readonly method: string; readonly path: string; readonly [key: string]: unknown }\nexport const operations: Record<string, Record<string, Operation | undefined>> = ${renderRoutes(api)};\n`,
-      },
-      { path: "server/src/server.ts", contents: server(api) },
-    ]),
-};
+          include: ["src"],
+        },
+        null,
+        2,
+      );
+      return [
+        {
+          path: "server/package.json",
+          contents: `${packageJson}\n`,
+        },
+        {
+          path: "server/tsconfig.json",
+          contents: `${tsconfig}\n`,
+        },
+        {
+          path: "server/src/models.ts",
+          contents: `import { Schema } from "effect";\n\n${renderSchemas(api)}\n`,
+        },
+        {
+          path: "server/src/types.ts",
+          contents: `${api.resources.map(renderInterface).join("\n\n")}\n`,
+        },
+        {
+          path: "server/src/operations.ts",
+          contents: `interface Operation { readonly method: string; readonly path: string; readonly [key: string]: unknown }\nexport const operations: Record<string, Record<string, Operation | undefined>> = ${routes};\n`,
+        },
+        { path: "server/src/server.ts", contents: server(api) },
+      ] satisfies ReadonlyArray<GeneratedFile>;
+    }).pipe(
+      Effect.mapError(
+        (cause) => new GenerationError({ message: "Backend adapter could not encode JSON", cause }),
+      ),
+    ),
+});
