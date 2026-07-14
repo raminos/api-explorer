@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Array as EffectArray, Option } from "effect";
 import { expect } from "vitest";
 import { parseContract } from "../../contract/parse.ts";
 import { compileContract } from "../../ir/compile.ts";
@@ -38,21 +38,19 @@ it.effect("emits independently consumable backend and frontend layers", () =>
     expect(backend.map(({ path }) => path)).toContain("server/src/server.ts");
     expect(frontend.map(({ path }) => path)).toContain("web/src/components/ResourceForm.tsx");
     expect(frontend.map(({ path }) => path)).toContain("web/src/App.tsx");
-    expect(backend.find(({ path }) => path === "server/src/types.ts")?.contents).toContain(
-      "interface Tasks",
+    const typesFile = EffectArray.findFirst(backend, ({ path }) => path === "server/src/types.ts");
+    expect(Option.map(typesFile, ({ contents }) => contents)).toEqual(
+      Option.some(expect.stringContaining("interface Tasks")),
     );
-    const title = ir.resources[0]?.fields[1];
-    expect(title).toBeDefined();
-    if (title !== undefined) {
-      expect(backendAdapter.units.renderFieldSchema(title)).toContain("Schema.maxLength(120)");
-    }
-    const dueAt = ir.resources[0]?.fields[2];
-    expect(dueAt).toBeDefined();
-    if (dueAt !== undefined) {
-      expect(backendAdapter.units.renderFieldSchema(dueAt)).toBe(
-        "Schema.optional(Schema.DateTimeUtc)",
-      );
-    }
+    const resource = EffectArray.get(ir.resources, 0);
+    const title = Option.flatMap(resource, ({ fields }) => EffectArray.get(fields, 1));
+    expect(Option.map(title, backendAdapter.units.renderFieldSchema)).toEqual(
+      Option.some(expect.stringContaining("Schema.maxLength(120)")),
+    );
+    const dueAt = Option.flatMap(resource, ({ fields }) => EffectArray.get(fields, 2));
+    expect(Option.map(dueAt, backendAdapter.units.renderFieldSchema)).toEqual(
+      Option.some('Schema.optionalWith(Schema.DateTimeUtc, { as: "Option" })'),
+    );
     expect(frontendAdapter.units.renderCreateUpdateForm()).toContain("switch (field.editor)");
   }).pipe(Effect.provide(Json.Default), Effect.provide(RegularExpression.Default)),
 );

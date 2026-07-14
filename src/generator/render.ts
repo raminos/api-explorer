@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Option, Schema } from "effect";
 import type { FieldIr, ResourceIr } from "../ir/model.ts";
 
 const quote = Schema.encodeSync(Schema.parseJson(Schema.String));
@@ -8,7 +8,7 @@ export const pascalCase = (value: string): string =>
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .split(/[^a-zA-Z0-9]+/)
     .filter(Boolean)
-    .map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
     .join("");
 
 const baseType = (field: FieldIr): string => {
@@ -19,7 +19,7 @@ const baseType = (field: FieldIr): string => {
     case "boolean":
       return "boolean";
     case "reference":
-      return field.referenceValueKind === "integer" ? "number" : "string";
+      return Option.contains(field.referenceValueKind, "integer") ? "number" : "string";
     case "enum":
       return field.enumValues.map(({ value }) => quote(value)).join(" | ");
     case "string":
@@ -41,7 +41,8 @@ export const typescriptType = (field: FieldIr): string =>
 export const renderInterface = (resource: ResourceIr): string => {
   const fields = resource.fields
     .map(
-      (field) => `  readonly ${field.name}${field.required ? "" : "?"}: ${typescriptType(field)};`,
+      (field) =>
+        `  readonly ${field.name}: ${field.required ? typescriptType(field) : `Option.Option<${typescriptType(field)}>`};`,
     )
     .join("\n");
   return `export interface ${pascalCase(resource.name)} {\n${fields}\n}`;

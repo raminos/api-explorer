@@ -1,5 +1,5 @@
 import { FileSystem } from "@effect/platform";
-import { Effect, ParseResult, Schema } from "effect";
+import { Effect, Option, ParseResult, Schema } from "effect";
 import { ContractReadError, ContractValidationError } from "../domain/errors.ts";
 import { ApiContractV1Schema } from "./schema.ts";
 
@@ -16,7 +16,7 @@ const decodeContractJson = Schema.decodeUnknown(Schema.parseJson(ApiContractV1Sc
 const mapParseError = (cause: ParseResult.ParseError) =>
   new ContractValidationError({
     message: ParseResult.TreeFormatter.formatErrorSync(cause),
-    cause,
+    cause: Option.some(cause),
   });
 
 export const parseContract = (input: unknown) =>

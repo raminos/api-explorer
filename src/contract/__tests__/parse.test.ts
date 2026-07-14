@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest";
-import { Effect, Either } from "effect";
+import { Effect, Array as EffectArray, Either, Option } from "effect";
 import { expect } from "vitest";
 import { parseContract } from "../parse.ts";
 
@@ -24,7 +24,9 @@ it.effect("decodes a strict 1.0 contract", () =>
   Effect.gen(function* () {
     const contract = yield* parseContract(minimal);
     expect(contract.api.name).toBe("Example");
-    expect(contract.resources[0]?.relationships).toEqual([]);
+    expect(
+      Option.map(EffectArray.get(contract.resources, 0), ({ relationships }) => relationships),
+    ).toEqual(Option.some([]));
   }),
 );
 

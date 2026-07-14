@@ -18,7 +18,7 @@ it.effect("wraps JSON parse failures in a typed library error", () =>
 it.effect("preserves the native stringify parameter surface", () =>
   Effect.gen(function* () {
     const json = yield* Json;
-    const output = yield* json.stringify({ value: 1 }, undefined, 2);
+    const output = yield* json.stringify({ value: 1 }, null, 2);
     expect(output).toBe('{\n  "value": 1\n}');
   }).pipe(Effect.provide(Json.Default)),
 );

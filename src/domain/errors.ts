@@ -1,4 +1,4 @@
-import { Data } from "effect";
+import { Data, type Option } from "effect";
 
 export class ContractReadError extends Data.TaggedError("ContractReadError")<{
   readonly path: string;
@@ -7,12 +7,12 @@ export class ContractReadError extends Data.TaggedError("ContractReadError")<{
 
 export class ContractValidationError extends Data.TaggedError("ContractValidationError")<{
   readonly message: string;
-  readonly cause?: unknown;
+  readonly cause: Option.Option<unknown>;
 }> {}
 
 export class GenerationError extends Data.TaggedError("GenerationError")<{
   readonly message: string;
-  readonly cause?: unknown;
+  readonly cause: Option.Option<unknown>;
 }> {}
 
 export class WriteError extends Data.TaggedError("WriteError")<{

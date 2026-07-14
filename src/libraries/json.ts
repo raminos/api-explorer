@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { LibraryError } from "./errors.ts";
 
 type ParseParameters = Parameters<typeof JSON.parse>;
@@ -14,9 +14,10 @@ export class Json extends Effect.Service<Json>()("api-explorer/libraries/Json", 
     stringify: (...parameters: StringifyParameters): Effect.Effect<string, LibraryError> =>
       Effect.try({
         try: () => {
-          const output = JSON.stringify(...parameters);
-          if (output === undefined) throw new TypeError("Value is not JSON serializable");
-          return output;
+          return Option.getOrThrowWith(
+            Option.fromNullable(JSON.stringify(...parameters)),
+            () => new TypeError("Value is not JSON serializable"),
+          );
         },
         catch: (cause) => new LibraryError({ library: "JSON", operation: "stringify", cause }),
       }),

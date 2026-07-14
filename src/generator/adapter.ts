@@ -1,4 +1,4 @@
-import { Effect, ParseResult, Schema } from "effect";
+import { Effect, Option, ParseResult, Schema } from "effect";
 import { GenerationError } from "../domain/errors.ts";
 import type { ApiIr, EditorKind, FieldIr, FieldKind, ResourceIr } from "../ir/model.ts";
 import type { LibraryError } from "../libraries/errors.ts";
@@ -94,7 +94,7 @@ export const defineAdapter = <Adapter extends GeneratorAdapter>(adapter: Adapter
           if (cause._tag === "GenerationError") return cause;
           return new GenerationError({
             message: `Adapter ${adapter.name} emitted invalid files: ${ParseResult.TreeFormatter.formatErrorSync(cause)}`,
-            cause,
+            cause: Option.some(cause),
           });
         }),
       ),

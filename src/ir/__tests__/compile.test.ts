@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest";
-import { Effect, Either } from "effect";
+import { Effect, Array as EffectArray, Either, Option } from "effect";
 import { expect } from "vitest";
 import { parseContract } from "../../contract/parse.ts";
 import { RegularExpression } from "../../libraries/regular-expression.ts";
@@ -27,8 +27,11 @@ it.effect("normalizes semantic fields into editor metadata", () =>
   Effect.gen(function* () {
     const parsed = yield* parseContract(contract);
     const ir = yield* compileContract(parsed);
-    expect(ir.resources[0]?.fields[1]?.editor).toBe("markdown");
-    expect(ir.resources[0]?.fields[1]?.constraints).toEqual({ maxLength: 1000 });
+    const resource = EffectArray.get(ir.resources, 0);
+    const body = Option.flatMap(resource, (value) => EffectArray.get(value.fields, 1));
+    expect(Option.map(body, ({ editor }) => editor)).toEqual(Option.some("markdown"));
+    const maximumLength = Option.flatMap(body, (field) => field.constraints.maxLength);
+    expect(Option.contains(maximumLength, 1000)).toBe(true);
   }).pipe(Effect.provide(RegularExpression.Default)),
 );
 

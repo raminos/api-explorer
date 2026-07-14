@@ -37,18 +37,18 @@ export const EditorKindSchema = Schema.Literal(
 export type EditorKind = typeof EditorKindSchema.Type;
 
 export const FieldConstraintsSchema = Schema.Struct({
-  minLength: Schema.optional(Schema.Number.pipe(Schema.int(), Schema.nonNegative())),
-  maxLength: Schema.optional(Schema.Number.pipe(Schema.int(), Schema.positive())),
-  pattern: Schema.optional(Schema.String),
-  minimum: Schema.optional(Schema.Number),
-  maximum: Schema.optional(Schema.Number),
+  minLength: Schema.OptionFromSelf(Schema.Number.pipe(Schema.int(), Schema.nonNegative())),
+  maxLength: Schema.OptionFromSelf(Schema.Number.pipe(Schema.int(), Schema.positive())),
+  pattern: Schema.OptionFromSelf(Schema.String),
+  minimum: Schema.OptionFromSelf(Schema.Number),
+  maximum: Schema.OptionFromSelf(Schema.Number),
 });
 export type FieldConstraints = typeof FieldConstraintsSchema.Type;
 
 export const FieldIrSchema = Schema.Struct({
   name: Schema.String,
   label: Schema.String,
-  description: Schema.optional(Schema.String),
+  description: Schema.OptionFromSelf(Schema.String),
   kind: FieldKindSchema,
   editor: EditorKindSchema,
   required: Schema.Boolean,
@@ -56,8 +56,8 @@ export const FieldIrSchema = Schema.Struct({
   nullable: Schema.Boolean,
   constraints: FieldConstraintsSchema,
   enumValues: Schema.Array(Schema.Struct({ value: Schema.String, label: Schema.String })),
-  referencedResource: Schema.optional(Schema.String),
-  referenceValueKind: Schema.optional(Schema.Literal("string", "integer")),
+  referencedResource: Schema.OptionFromSelf(Schema.String),
+  referenceValueKind: Schema.OptionFromSelf(Schema.Literal("string", "integer")),
 });
 export type FieldIr = typeof FieldIrSchema.Type;
 
@@ -118,12 +118,12 @@ export const ResourceIrSchema = Schema.Struct({
   idField: Schema.String,
   fields: Schema.Array(FieldIrSchema),
   operations: Schema.Struct({
-    list: Schema.optional(ListOperationIrSchema),
-    get: Schema.optional(OperationIrSchema),
-    create: Schema.optional(OperationIrSchema),
-    update: Schema.optional(OperationIrSchema),
-    delete: Schema.optional(OperationIrSchema),
-    search: Schema.optional(SearchOperationIrSchema),
+    list: Schema.OptionFromSelf(ListOperationIrSchema),
+    get: Schema.OptionFromSelf(OperationIrSchema),
+    create: Schema.OptionFromSelf(OperationIrSchema),
+    update: Schema.OptionFromSelf(OperationIrSchema),
+    delete: Schema.OptionFromSelf(OperationIrSchema),
+    search: Schema.OptionFromSelf(SearchOperationIrSchema),
   }),
   relationships: Schema.Array(RelationshipIrSchema),
 });
@@ -147,7 +147,7 @@ export const ApiIrSchema = Schema.Struct({
   schemaVersion: Schema.Literal("1.0"),
   api: Schema.Struct({
     name: Schema.String,
-    description: Schema.optional(Schema.String),
+    description: Schema.OptionFromSelf(Schema.String),
     baseUrl: Schema.String,
     auth: AuthIrSchema,
   }),

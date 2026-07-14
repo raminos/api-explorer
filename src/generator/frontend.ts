@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { GenerationError } from "../domain/errors.ts";
 import type { ApiIr, ResourceIr } from "../ir/model.ts";
 import { Json } from "../libraries/json.ts";
@@ -21,9 +21,12 @@ const metadata = (api: ApiIr) =>
   }));
 
 const apiClient = `import { FetchHttpClient, HttpClient, HttpClientRequest } from "@effect/platform";
-import { Effect, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 
-const baseUrl = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
+const baseUrl = Option.getOrElse(
+  Option.fromNullable(import.meta.env.VITE_API_URL),
+  () => "http://localhost:3001",
+);
 
 class ApiError extends Schema.TaggedError<ApiError>()("ApiError", {
   status: Schema.Number,
@@ -39,23 +42,23 @@ const execute = (request: HttpClientRequest.HttpClientRequest): Promise<unknown>
     return yield* response.json;
   }).pipe(Effect.provide(FetchHttpClient.layer), Effect.runPromise);
 
-const mutationRequest = (path: string, method: "POST" | "PATCH" | "DELETE", body?: unknown) =>
+const mutationRequest = (path: string, method: "POST" | "PATCH" | "DELETE", body: Option.Option<unknown>) =>
   Effect.gen(function* () {
     switch (method) {
       case "POST":
         return yield* HttpClientRequest.post(\`\${baseUrl}/\${path}\`).pipe(
-          HttpClientRequest.bodyJson(body),
+          HttpClientRequest.bodyJson(Option.getOrNull(body)),
         );
       case "PATCH":
         return yield* HttpClientRequest.patch(\`\${baseUrl}/\${path}\`).pipe(
-          HttpClientRequest.bodyJson(body),
+          HttpClientRequest.bodyJson(Option.getOrNull(body)),
         );
       case "DELETE":
         return HttpClientRequest.del(\`\${baseUrl}/\${path}\`);
     }
   });
 
-const mutate = (path: string, method: "POST" | "PATCH" | "DELETE", body?: unknown) =>
+const mutate = (path: string, method: "POST" | "PATCH" | "DELETE", body: Option.Option<unknown>) =>
   mutationRequest(path, method, body).pipe(
     Effect.flatMap((request) => Effect.promise(() => execute(request))),
     Effect.runPromise,
@@ -64,45 +67,47 @@ const mutate = (path: string, method: "POST" | "PATCH" | "DELETE", body?: unknow
 export const api = {
   list: (resource: string) => execute(HttpClientRequest.get(\`\${baseUrl}/\${resource}\`)),
   get: (resource: string, id: string) => execute(HttpClientRequest.get(\`\${baseUrl}/\${resource}/\${id}\`)),
-  create: (resource: string, input: unknown) => mutate(resource, "POST", input),
-  update: (resource: string, id: string, input: unknown) => mutate(\`\${resource}/\${id}\`, "PATCH", input),
-  remove: (resource: string, id: string) => mutate(\`\${resource}/\${id}\`, "DELETE"),
+  create: (resource: string, input: unknown) => mutate(resource, "POST", Option.some(input)),
+  update: (resource: string, id: string, input: unknown) => mutate(\`\${resource}/\${id}\`, "PATCH", Option.some(input)),
+  remove: (resource: string, id: string) => mutate(\`\${resource}/\${id}\`, "DELETE", Option.none()),
 };
 `;
 
 const form = `import type { FormEvent } from "react";
+import { Array as EffectArray, Option } from "effect";
 import type { ResourceDefinition } from "../resources.ts";
 
 export function ResourceForm({ resource, initial, onCancel, onSubmit }: {
   readonly resource: ResourceDefinition;
-  readonly initial: Record<string, unknown> | undefined;
-  readonly onCancel: (() => void) | undefined;
+  readonly initial: Option.Option<Record<string, unknown>>;
+  readonly onCancel: Option.Option<() => void>;
   readonly onSubmit: (input: Record<string, unknown>) => void;
 }) {
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
-    const input = Object.fromEntries(resource.fields.filter((field) => !field.readOnly).map((field) => {
+    const entries = EffectArray.filterMap(resource.fields.filter((field) => !field.readOnly), (field): Option.Option<readonly [string, unknown]> => {
       const raw = data.get(field.name);
-      if (field.kind === "boolean") return [field.name, data.has(field.name)];
-      if (field.kind === "integer" || field.kind === "number" || (field.kind === "reference" && field.referenceValueKind === "integer"))
-        return [field.name, raw === null || raw === "" ? undefined : Number(raw)];
-      return [field.name, raw === null || raw === "" ? undefined : raw];
-    }));
+      if (field.kind === "boolean") return Option.some([field.name, data.has(field.name)] as const);
+      if (field.kind === "integer" || field.kind === "number" || (field.kind === "reference" && field.referenceValueKind._tag === "Some" && field.referenceValueKind.value === "integer"))
+        return Option.fromNullable(raw).pipe(Option.filter((value) => value !== ""), Option.map((value) => [field.name, Number(value)] as const));
+      return Option.fromNullable(raw).pipe(Option.filter((value) => value !== ""), Option.map((value) => [field.name, value] as const));
+    });
+    const input = Object.fromEntries(entries);
     onSubmit(input);
   };
   return <form className="card form" onSubmit={submit}>
     {resource.fields.filter((field) => !field.readOnly).map((field) => <label key={field.name}>
       <span>{field.label}{field.required ? " *" : ""}</span>
-      <FieldInput field={field} value={initial?.[field.name]} />
+      <FieldInput field={field} value={Option.flatMap(initial, (value) => Option.fromNullable(value[field.name]))} />
     </label>)}
-    <div className="form-actions"><button type="submit">{initial === undefined ? "Create" : "Update"} {resource.singularLabel}</button>
-      {onCancel === undefined ? null : <button className="secondary" onClick={onCancel} type="button">Cancel</button>}</div>
+    <div className="form-actions"><button type="submit">{Option.isNone(initial) ? "Create" : "Update"} {resource.singularLabel}</button>
+      {Option.match(onCancel, { onNone: () => null, onSome: (cancel) => <button className="secondary" onClick={cancel} type="button">Cancel</button> })}</div>
   </form>;
 }
 
-function FieldInput({ field, value }: { readonly field: ResourceDefinition["fields"][number]; readonly value: unknown }) {
-  const defaultValue = value === undefined || value === null ? undefined : String(value);
+function FieldInput({ field, value }: { readonly field: ResourceDefinition["fields"][number]; readonly value: Option.Option<unknown> }) {
+  const defaultValue = Option.match(value, { onNone: () => "", onSome: String });
   switch (field.editor) {
     case "textarea": case "markdown": case "richText": case "table":
       return <textarea defaultValue={defaultValue} name={field.name} required={field.required} />;
@@ -111,9 +116,9 @@ function FieldInput({ field, value }: { readonly field: ResourceDefinition["fiel
         {field.enumValues.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
       </select>;
     case "resourceSelect":
-      return <input defaultValue={defaultValue} name={field.name} required={field.required} type={field.referenceValueKind === "integer" ? "number" : "text"} />;
+      return <input defaultValue={defaultValue} name={field.name} required={field.required} type={field.referenceValueKind._tag === "Some" && field.referenceValueKind.value === "integer" ? "number" : "text"} />;
     case "checkbox":
-      return <input defaultChecked={Boolean(value)} name={field.name} type="checkbox" />;
+      return <input defaultChecked={Option.exists(value, Boolean)} name={field.name} type="checkbox" />;
     case "datetime":
       return <input defaultValue={defaultValue} name={field.name} required={field.required} type="datetime-local" />;
     case "text": case "url": case "email": case "date": case "time": case "number":
@@ -122,7 +127,8 @@ function FieldInput({ field, value }: { readonly field: ResourceDefinition["fiel
 }
 `;
 
-const table = `import type { ResourceDefinition } from "../resources.ts";
+const table = `import { Option } from "effect";
+import type { ResourceDefinition } from "../resources.ts";
 
 export function ResourceTable({ resource, rows, onDelete, onEdit }: {
   readonly resource: ResourceDefinition;
@@ -139,7 +145,7 @@ export function ResourceTable({ resource, rows, onDelete, onEdit }: {
 }
 
 const renderValue = (value: unknown, editor: string) => {
-  const text = String(value ?? "—");
+  const text = Option.match(Option.fromNullable(value), { onNone: () => "—", onSome: String });
   if (editor === "url") return <a href={text} rel="noreferrer" target="_blank">{text}</a>;
   if (["textarea", "markdown", "richText"].includes(editor) && text.length > 120)
     return <details><summary>{text.slice(0, 120)}…</summary><p>{text}</p></details>;
@@ -149,24 +155,25 @@ const renderValue = (value: unknown, editor: string) => {
 
 const page = `import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Option } from "effect";
 import { api } from "../api.ts";
 import type { ResourceDefinition } from "../resources.ts";
 import { ResourceForm } from "./ResourceForm.tsx";
 import { ResourceTable } from "./ResourceTable.tsx";
 
 export function ResourcePage({ resource }: { readonly resource: ResourceDefinition }) {
-  const [editing, setEditing] = useState<Record<string, unknown> | undefined>();
+  const [editing, setEditing] = useState<Option.Option<Record<string, unknown>>>(Option.none());
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey: [resource.name], queryFn: () => api.list(resource.name) });
   const refresh = () => queryClient.invalidateQueries({ queryKey: [resource.name] });
   const create = useMutation({ mutationFn: (input: Record<string, unknown>) => api.create(resource.name, input), onSuccess: refresh });
-  const update = useMutation({ mutationFn: (input: Record<string, unknown>) => api.update(resource.name, String(editing?.[resource.idField]), input), onSuccess: () => { setEditing(undefined); refresh(); } });
+  const update = useMutation({ mutationFn: ({ id, input }: { readonly id: string; readonly input: Record<string, unknown> }) => api.update(resource.name, id, input), onSuccess: () => { setEditing(Option.none()); refresh(); } });
   const remove = useMutation({ mutationFn: (id: string) => api.remove(resource.name, id), onSuccess: refresh });
   const rows = Array.isArray(query.data) ? query.data as ReadonlyArray<Record<string, unknown>> : [];
   return <main><header><p className="eyebrow">API resource</p><h1>{resource.pluralLabel}</h1></header>
-    <ResourceForm key={editing === undefined ? "create" : String(editing[resource.idField])} resource={resource} initial={editing} onCancel={editing === undefined ? undefined : () => setEditing(undefined)} onSubmit={(input) => editing === undefined ? create.mutate(input) : update.mutate(input)} />
+    <ResourceForm key={Option.match(editing, { onNone: () => "create", onSome: (value) => String(value[resource.idField]) })} resource={resource} initial={editing} onCancel={Option.map(editing, () => () => setEditing(Option.none()))} onSubmit={(input) => Option.match(editing, { onNone: () => create.mutate(input), onSome: (value) => update.mutate({ id: String(value[resource.idField]), input }) })} />
     {query.isLoading ? <p>Loading…</p> : query.error ? <p role="alert">{String(query.error)}</p>
-      : <ResourceTable resource={resource} rows={rows} onDelete={(id) => remove.mutate(id)} onEdit={setEditing} />}
+      : <ResourceTable resource={resource} rows={rows} onDelete={(id) => remove.mutate(id)} onEdit={(row) => setEditing(Option.some(row))} />}
   </main>;
 }
 `;
@@ -176,8 +183,7 @@ import { resources, type ResourceDefinition } from "./resources.ts";
 import { ResourcePage } from "./components/ResourcePage.tsx";
 
 export function App() {
-  const [selected, setSelected] = useState<ResourceDefinition | undefined>(resources[0]);
-  if (selected === undefined) return <p>No resources configured.</p>;
+  const [selected, setSelected] = useState<ResourceDefinition>(resources[0]);
   return <div className="shell"><aside><div className="brand">API Explorer</div><nav>
     {resources.map((resource) => <button className={selected.name === resource.name ? "active" : ""}
       key={resource.name} onClick={() => setSelected(resource)}>{resource.pluralLabel}</button>)}
@@ -267,11 +273,11 @@ export const frontendAdapter = defineAdapter({
         },
         {
           path: "web/src/types.ts",
-          contents: `${api.resources.map(frontendUnits.renderDataTransfer).join("\n\n")}\n`,
+          contents: `import type { Option } from "effect";\n\n${api.resources.map(frontendUnits.renderDataTransfer).join("\n\n")}\n`,
         },
         {
           path: "web/src/resources.ts",
-          contents: `export interface ResourceDefinition {\n  readonly name: string;\n  readonly singularLabel: string;\n  readonly pluralLabel: string;\n  readonly idField: string;\n  readonly fields: ReadonlyArray<{ readonly name: string; readonly label: string; readonly kind: string; readonly editor: "text" | "textarea" | "markdown" | "richText" | "table" | "url" | "email" | "date" | "time" | "datetime" | "number" | "checkbox" | "select" | "resourceSelect"; readonly required: boolean; readonly readOnly: boolean; readonly referenceValueKind?: "string" | "integer"; readonly enumValues: ReadonlyArray<{ readonly value: string; readonly label: string }>; readonly [key: string]: unknown }>;\n  readonly relationships: ReadonlyArray<{ readonly name: string; readonly kind: "belongsTo" | "hasMany"; readonly resource: string; readonly localField: string; readonly foreignField: string }>;\n}\n\nexport const resources: ReadonlyArray<ResourceDefinition> = ${resourceMetadata};\n`,
+          contents: `type Maybe<Value> = { readonly _id: string; readonly _tag: "None" } | { readonly _id: string; readonly _tag: "Some"; readonly value: Value }\nexport interface ResourceDefinition {\n  readonly name: string;\n  readonly singularLabel: string;\n  readonly pluralLabel: string;\n  readonly idField: string;\n  readonly fields: ReadonlyArray<{ readonly name: string; readonly label: string; readonly kind: string; readonly editor: "text" | "textarea" | "markdown" | "richText" | "table" | "url" | "email" | "date" | "time" | "datetime" | "number" | "checkbox" | "select" | "resourceSelect"; readonly required: boolean; readonly readOnly: boolean; readonly referenceValueKind: Maybe<"string" | "integer">; readonly enumValues: ReadonlyArray<{ readonly value: string; readonly label: string }>; readonly [key: string]: unknown }>;\n  readonly relationships: ReadonlyArray<{ readonly name: string; readonly kind: "belongsTo" | "hasMany"; readonly resource: string; readonly localField: string; readonly foreignField: string }>;\n}\n\nexport const resources: readonly [ResourceDefinition, ...ReadonlyArray<ResourceDefinition>] = ${resourceMetadata};\n`,
         },
         { path: "web/src/api.ts", contents: frontendUnits.renderApiClient() },
         {
@@ -296,7 +302,10 @@ export const frontendAdapter = defineAdapter({
     }).pipe(
       Effect.mapError(
         (cause) =>
-          new GenerationError({ message: "Frontend adapter could not encode JSON", cause }),
+          new GenerationError({
+            message: "Frontend adapter could not encode JSON",
+            cause: Option.some(cause),
+          }),
       ),
     ),
 });

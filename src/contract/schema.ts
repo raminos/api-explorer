@@ -8,23 +8,27 @@ const Identifier = Schema.String.pipe(
 const CommonField = {
   name: Identifier,
   label: Schema.String.pipe(Schema.minLength(1)),
-  description: Schema.optional(Schema.String),
+  description: Schema.optionalWith(Schema.String, { as: "Option" }),
   required: Schema.Boolean,
-  readOnly: Schema.optional(Schema.Boolean),
-  nullable: Schema.optional(Schema.Boolean),
+  readOnly: Schema.optionalWith(Schema.Boolean, { as: "Option" }),
+  nullable: Schema.optionalWith(Schema.Boolean, { as: "Option" }),
 };
 
 const TextConstraints = {
-  minLength: Schema.optional(Schema.Number.pipe(Schema.int(), Schema.nonNegative())),
-  maxLength: Schema.optional(Schema.Number.pipe(Schema.int(), Schema.positive())),
-  pattern: Schema.optional(Schema.String),
+  minLength: Schema.optionalWith(Schema.Number.pipe(Schema.int(), Schema.nonNegative()), {
+    as: "Option",
+  }),
+  maxLength: Schema.optionalWith(Schema.Number.pipe(Schema.int(), Schema.positive()), {
+    as: "Option",
+  }),
+  pattern: Schema.optionalWith(Schema.String, { as: "Option" }),
 };
 
 const TextField = Schema.Struct({
   ...CommonField,
   type: Schema.Literal("string", "markdown", "html", "csv", "url", "email"),
   ...TextConstraints,
-  multiline: Schema.optional(Schema.Boolean),
+  multiline: Schema.optionalWith(Schema.Boolean, { as: "Option" }),
 });
 
 const TemporalField = Schema.Struct({
@@ -35,8 +39,8 @@ const TemporalField = Schema.Struct({
 const NumberField = Schema.Struct({
   ...CommonField,
   type: Schema.Literal("integer", "number"),
-  minimum: Schema.optional(Schema.Number),
-  maximum: Schema.optional(Schema.Number),
+  minimum: Schema.optionalWith(Schema.Number, { as: "Option" }),
+  maximum: Schema.optionalWith(Schema.Number, { as: "Option" }),
 });
 
 const BooleanField = Schema.Struct({ ...CommonField, type: Schema.Literal("boolean") });
@@ -124,12 +128,12 @@ const ResourceSchema = Schema.Struct({
   idField: Identifier,
   fields: Schema.Array(FieldSchema).pipe(Schema.minItems(1)),
   operations: Schema.Struct({
-    list: Schema.optional(ListOperationSchema),
-    get: Schema.optional(OperationSchema),
-    create: Schema.optional(OperationSchema),
-    update: Schema.optional(OperationSchema),
-    delete: Schema.optional(OperationSchema),
-    search: Schema.optional(SearchOperationSchema),
+    list: Schema.optionalWith(ListOperationSchema, { as: "Option" }),
+    get: Schema.optionalWith(OperationSchema, { as: "Option" }),
+    create: Schema.optionalWith(OperationSchema, { as: "Option" }),
+    update: Schema.optionalWith(OperationSchema, { as: "Option" }),
+    delete: Schema.optionalWith(OperationSchema, { as: "Option" }),
+    search: Schema.optionalWith(SearchOperationSchema, { as: "Option" }),
   }),
   relationships: Schema.optionalWith(Schema.Array(RelationshipSchema), { default: () => [] }),
 });
@@ -152,7 +156,7 @@ export const ApiContractV1Schema = Schema.Struct({
   schemaVersion: Schema.Literal("1.0"),
   api: Schema.Struct({
     name: Schema.String.pipe(Schema.minLength(1)),
-    description: Schema.optional(Schema.String),
+    description: Schema.optionalWith(Schema.String, { as: "Option" }),
     baseUrl: Schema.String.pipe(Schema.startsWith("https://")),
     auth: AuthSchema,
   }),
