@@ -1,0 +1,212 @@
+{
+  "schemaVersion": "1.0",
+  "api": {
+    "name": "API Explorer Showcase",
+    "description": "Exercises strict field semantics, headers, nullable values, arrays, and every pagination strategy.",
+    "baseUrl": "https://api.example.com",
+    "auth": { "type": "bearer", "environmentVariable": "SHOWCASE_API_TOKEN" },
+    "headers": [
+      { "name": "accept", "source": "literal", "value": "application/json" },
+      {
+        "name": "x-tenant-token",
+        "source": "environment",
+        "environmentVariable": "SHOWCASE_TENANT_TOKEN"
+      }
+    ]
+  },
+  "resources": [
+    {
+      "name": "profiles",
+      "singularLabel": "Profile",
+      "pluralLabel": "Profiles",
+      "idField": "id",
+      "fields": [
+        { "name": "id", "label": "ID", "type": "uuid", "required": true, "readOnly": true },
+        {
+          "name": "displayName",
+          "label": "Display name",
+          "type": "string",
+          "required": true,
+          "minLength": 1,
+          "maxLength": 80
+        },
+        {
+          "name": "biography",
+          "label": "Biography",
+          "type": "markdown",
+          "required": false,
+          "nullable": true,
+          "maxLength": 10000,
+          "multiline": true
+        },
+        { "name": "email", "label": "Email", "type": "email", "required": true },
+        { "name": "phone", "label": "Phone", "type": "phone", "required": false },
+        { "name": "homepage", "label": "Homepage", "type": "url", "required": false },
+        { "name": "avatar", "label": "Avatar", "type": "image", "required": false },
+        {
+          "name": "password",
+          "label": "Password",
+          "type": "password",
+          "required": false,
+          "writeOnly": true,
+          "minLength": 12
+        },
+        { "name": "birthday", "label": "Birthday", "type": "date", "required": false },
+        { "name": "availableAt", "label": "Available at", "type": "time", "required": false },
+        {
+          "name": "createdAt",
+          "label": "Created at",
+          "type": "datetime",
+          "required": true,
+          "readOnly": true
+        },
+        {
+          "name": "status",
+          "label": "Status",
+          "type": "enum",
+          "required": true,
+          "values": [
+            { "value": "active", "label": "Active" },
+            { "value": "paused", "label": "Paused" }
+          ]
+        },
+        {
+          "name": "roles",
+          "label": "Roles",
+          "type": "array",
+          "required": true,
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "enum",
+            "values": [
+              { "value": "author", "label": "Author" },
+              { "value": "reviewer", "label": "Reviewer" }
+            ]
+          }
+        },
+        {
+          "name": "aliases",
+          "label": "Aliases",
+          "type": "array",
+          "required": false,
+          "maxItems": 5,
+          "items": { "type": "string" }
+        },
+        {
+          "name": "score",
+          "label": "Score",
+          "type": "number",
+          "required": false,
+          "minimum": 0,
+          "maximum": 100
+        },
+        { "name": "enabled", "label": "Enabled", "type": "boolean", "required": true },
+        {
+          "name": "signature",
+          "label": "Signature",
+          "type": "code",
+          "required": false,
+          "language": "typescript",
+          "maxLength": 2000
+        }
+      ],
+      "operations": {
+        "list": {
+          "method": "GET",
+          "path": "/profiles",
+          "pagination": { "type": "none", "response": { "itemsPath": "$.data" } }
+        },
+        "create": { "method": "POST", "path": "/profiles" },
+        "update": { "method": "PATCH", "path": "/profiles/{id}" }
+      }
+    },
+    {
+      "name": "events",
+      "singularLabel": "Event",
+      "pluralLabel": "Events",
+      "idField": "id",
+      "fields": [
+        { "name": "id", "label": "ID", "type": "integer", "required": true, "readOnly": true },
+        {
+          "name": "summary",
+          "label": "Summary",
+          "type": "html",
+          "required": true,
+          "maxLength": 5000
+        },
+        {
+          "name": "export",
+          "label": "CSV export",
+          "type": "csv",
+          "required": false,
+          "maxLength": 50000
+        }
+      ],
+      "operations": {
+        "list": {
+          "method": "GET",
+          "path": "/events",
+          "pagination": {
+            "type": "cursor",
+            "cursorParameter": "after",
+            "limitParameter": "limit",
+            "nextCursorPath": "$.page.nextCursor",
+            "defaultLimit": 25,
+            "response": { "itemsPath": "$.data" }
+          }
+        }
+      }
+    },
+    {
+      "name": "records",
+      "singularLabel": "Record",
+      "pluralLabel": "Records",
+      "idField": "id",
+      "fields": [
+        { "name": "id", "label": "ID", "type": "integer", "required": true, "readOnly": true },
+        { "name": "title", "label": "Title", "type": "string", "required": true }
+      ],
+      "operations": {
+        "list": {
+          "method": "GET",
+          "path": "/records",
+          "pagination": {
+            "type": "offset",
+            "offsetParameter": "offset",
+            "limitParameter": "limit",
+            "defaultLimit": 50,
+            "response": {
+              "itemsPath": "$.data",
+              "end": { "type": "totalItems", "totalItemsPath": "$.page.totalItems" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "messages",
+      "singularLabel": "Message",
+      "pluralLabel": "Messages",
+      "idField": "id",
+      "fields": [
+        { "name": "id", "label": "ID", "type": "integer", "required": true, "readOnly": true },
+        { "name": "body", "label": "Body", "type": "string", "required": true, "multiline": true }
+      ],
+      "operations": {
+        "list": {
+          "method": "GET",
+          "path": "/messages",
+          "pagination": {
+            "type": "page",
+            "pageParameter": "page",
+            "sizeParameter": "pageSize",
+            "defaultSize": 20,
+            "firstPage": 1,
+            "response": { "itemsPath": "$.data", "totalPagesPath": "$.page.totalPages" }
+          }
+        }
+      }
+    }
+  ]
+}

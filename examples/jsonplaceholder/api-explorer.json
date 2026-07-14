@@ -51,7 +51,11 @@
         }
       ],
       "operations": {
-        "list": { "method": "GET", "path": "/users", "pagination": { "type": "none" } },
+        "list": {
+          "method": "GET",
+          "path": "/users",
+          "pagination": { "type": "none", "response": { "itemsPath": "$" } }
+        },
         "get": { "method": "GET", "path": "/users/{id}" },
         "create": { "method": "POST", "path": "/users" },
         "update": { "method": "PATCH", "path": "/users/{id}" },
@@ -60,7 +64,7 @@
           "method": "GET",
           "path": "/users",
           "queryParameter": "username",
-          "pagination": { "type": "none" }
+          "pagination": { "type": "none", "response": { "itemsPath": "$" } }
         }
       },
       "relationships": [
@@ -122,7 +126,8 @@
             "type": "offset",
             "offsetParameter": "_start",
             "limitParameter": "_limit",
-            "defaultLimit": 20
+            "defaultLimit": 20,
+            "response": { "itemsPath": "$", "end": { "type": "shortPage" } }
           }
         },
         "get": { "method": "GET", "path": "/posts/{id}" },
@@ -137,7 +142,8 @@
             "type": "offset",
             "offsetParameter": "_start",
             "limitParameter": "_limit",
-            "defaultLimit": 20
+            "defaultLimit": 20,
+            "response": { "itemsPath": "$", "end": { "type": "shortPage" } }
           }
         }
       },
@@ -202,10 +208,11 @@
           "method": "GET",
           "path": "/comments",
           "pagination": {
-            "type": "page",
-            "pageParameter": "_page",
-            "sizeParameter": "_limit",
-            "defaultSize": 25
+            "type": "offset",
+            "offsetParameter": "_start",
+            "limitParameter": "_limit",
+            "defaultLimit": 25,
+            "response": { "itemsPath": "$", "end": { "type": "shortPage" } }
           }
         },
         "get": { "method": "GET", "path": "/comments/{id}" },

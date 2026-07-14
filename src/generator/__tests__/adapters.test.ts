@@ -23,7 +23,11 @@ const input = {
         { name: "dueAt", label: "Due at", type: "datetime", required: false },
       ],
       operations: {
-        list: { method: "GET", path: "/tasks", pagination: { type: "none" } },
+        list: {
+          method: "GET",
+          path: "/tasks",
+          pagination: { type: "none", response: { itemsPath: "$" } },
+        },
       },
     },
   ],

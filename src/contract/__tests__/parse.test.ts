@@ -14,7 +14,11 @@ const minimal = {
       idField: "id",
       fields: [{ name: "id", label: "ID", type: "integer", required: true, readOnly: true }],
       operations: {
-        list: { method: "GET", path: "/items", pagination: { type: "none" } },
+        list: {
+          method: "GET",
+          path: "/items",
+          pagination: { type: "none", response: { itemsPath: "$" } },
+        },
       },
     },
   ],
@@ -35,5 +39,33 @@ it.effect("rejects unknown properties", () =>
     const result = yield* Effect.either(parseContract({ ...minimal, typo: true }));
     expect(Either.isLeft(result)).toBe(true);
     if (Either.isLeft(result)) expect(result.left.message).toContain("typo");
+  }),
+);
+
+it.effect("rejects presentation annotations that do not belong to a field kind", () =>
+  Effect.gen(function* () {
+    const resource = minimal.resources[0];
+    const result = yield* Effect.either(
+      parseContract({
+        ...minimal,
+        resources: [
+          {
+            ...resource,
+            fields: [
+              ...resource.fields,
+              {
+                name: "email",
+                label: "Email",
+                type: "email",
+                required: true,
+                language: "typescript",
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(Either.isLeft(result)).toBe(true);
+    if (Either.isLeft(result)) expect(result.left.message).toContain("language");
   }),
 );

@@ -46,3 +46,30 @@ it.effect("rejects an ID field that does not exist", () =>
     if (Either.isLeft(result)) expect(result.left.message).toContain("unknown idField missing");
   }).pipe(Effect.provide(RegularExpression.Default)),
 );
+
+it.effect("rejects contradictory field constraints", () =>
+  Effect.gen(function* () {
+    const parsed = yield* parseContract({
+      ...contract,
+      resources: [
+        {
+          ...contract.resources[0],
+          fields: [
+            ...contract.resources[0].fields,
+            {
+              name: "title",
+              label: "Title",
+              type: "string",
+              required: true,
+              minLength: 20,
+              maxLength: 10,
+            },
+          ],
+        },
+      ],
+    });
+    const result = yield* Effect.either(compileContract(parsed));
+    expect(Either.isLeft(result)).toBe(true);
+    if (Either.isLeft(result)) expect(result.left.message).toContain("minLength greater");
+  }).pipe(Effect.provide(RegularExpression.Default)),
+);

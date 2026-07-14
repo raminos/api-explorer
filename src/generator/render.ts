@@ -22,12 +22,42 @@ const baseType = (field: FieldIr): string => {
       return Option.contains(field.referenceValueKind, "integer") ? "number" : "string";
     case "enum":
       return field.enumValues.map(({ value }) => quote(value)).join(" | ");
+    case "array":
+      return Option.match(field.arrayElement, {
+        onNone: () => "never",
+        onSome: (element) => {
+          switch (element.kind) {
+            case "integer":
+            case "number":
+              return "ReadonlyArray<number>";
+            case "boolean":
+              return "ReadonlyArray<boolean>";
+            case "enum":
+              return `ReadonlyArray<${element.enumValues.map(({ value }) => quote(value)).join(" | ")}>`;
+            case "reference":
+              return Option.contains(element.referenceValueKind, "integer")
+                ? "ReadonlyArray<number>"
+                : "ReadonlyArray<string>";
+            case "string":
+            case "url":
+            case "email":
+            case "phone":
+            case "uuid":
+              return "ReadonlyArray<string>";
+          }
+        },
+      });
     case "string":
     case "markdown":
     case "html":
     case "csv":
+    case "code":
     case "url":
     case "email":
+    case "phone":
+    case "password":
+    case "image":
+    case "uuid":
     case "date":
     case "time":
     case "datetime":

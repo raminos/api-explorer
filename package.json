@@ -14,6 +14,7 @@
     "check:types": "tsc --noEmit",
     "format": "biome check --write .",
     "generate:example": "bun run src/cli.ts generate examples/jsonplaceholder/api-explorer.json --output .generated/jsonplaceholder",
+    "generate:showcase": "bun run src/cli.ts generate examples/showcase/api-explorer.json --output .generated/showcase",
     "prepare": "lefthook install",
     "start": "bun run src/cli.ts",
     "test": "vitest run",

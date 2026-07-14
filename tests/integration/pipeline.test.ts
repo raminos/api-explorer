@@ -1,7 +1,8 @@
 import { it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Array as EffectArray, Option } from "effect";
 import { expect } from "vitest";
 import exampleContract from "../../examples/jsonplaceholder/api-explorer.json";
+import showcaseContract from "../../examples/showcase/api-explorer.json";
 import { parseContract } from "../../src/contract/parse.ts";
 import { backendAdapter } from "../../src/generator/backend.ts";
 import { frontendAdapter } from "../../src/generator/frontend.ts";
@@ -17,7 +18,49 @@ it.effect("compiles the example contract through every built-in adapter", () =>
 
     expect(ir.resources.map(({ name }) => name)).toEqual(["users", "posts", "comments"]);
     expect(backend).toHaveLength(8);
-    expect(frontend).toHaveLength(12);
-    expect(new Set([...backend, ...frontend].map(({ path }) => path)).size).toBe(20);
+    expect(frontend).toHaveLength(14);
+    expect(new Set([...backend, ...frontend].map(({ path }) => path)).size).toBe(22);
+  }).pipe(Effect.provide(Json.Default), Effect.provide(RegularExpression.Default)),
+);
+
+it.effect("preserves strict field, header, and pagination intent through every adapter", () =>
+  Effect.gen(function* () {
+    const ir = yield* parseContract(showcaseContract).pipe(Effect.flatMap(compileContract));
+    expect(ir.api.headers).toHaveLength(2);
+    expect(
+      ir.resources.map(({ operations }) =>
+        Option.map(operations.list, ({ pagination }) => pagination.type),
+      ),
+    ).toEqual([
+      Option.some("none"),
+      Option.some("cursor"),
+      Option.some("offset"),
+      Option.some("page"),
+    ]);
+
+    const profile = EffectArray.get(ir.resources, 0);
+    const roles = Option.flatMap(profile, ({ fields }) =>
+      EffectArray.findFirst(fields, ({ name }) => name === "roles"),
+    );
+    const password = Option.flatMap(profile, ({ fields }) =>
+      EffectArray.findFirst(fields, ({ name }) => name === "password"),
+    );
+    expect(Option.map(roles, ({ editor }) => editor)).toEqual(Option.some("multiSelect"));
+    expect(Option.map(password, ({ writeOnly }) => writeOnly)).toEqual(Option.some(true));
+
+    const backend = yield* backendAdapter.generate(ir);
+    const frontend = yield* frontendAdapter.generate(ir);
+    const server = EffectArray.findFirst(backend, ({ path }) => path === "server/src/server.ts");
+    const browserApi = EffectArray.findFirst(frontend, ({ path }) => path === "web/src/api.ts");
+    const page = EffectArray.findFirst(frontend, ({ path }) => path.endsWith("ResourcePage.tsx"));
+    expect(Option.map(server, ({ contents }) => contents)).toEqual(
+      Option.some(expect.stringContaining('Config.redacted("SHOWCASE_TENANT_TOKEN")')),
+    );
+    expect(Option.map(browserApi, ({ contents }) => contents)).toEqual(
+      Option.some(expect.stringContaining("API response failed schema validation")),
+    );
+    expect(Option.map(page, ({ contents }) => contents)).toEqual(
+      Option.some(expect.stringContaining("Load more")),
+    );
   }).pipe(Effect.provide(Json.Default), Effect.provide(RegularExpression.Default)),
 );

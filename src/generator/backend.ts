@@ -1,6 +1,6 @@
 import { Effect, Option, Schema } from "effect";
 import { GenerationError } from "../domain/errors.ts";
-import type { ApiIr, FieldIr, ResourceIr } from "../ir/model.ts";
+import type { ApiIr, ResourceIr } from "../ir/model.ts";
 import { Json } from "../libraries/json.ts";
 import {
   type BackendAdapterUnits,
@@ -8,88 +8,10 @@ import {
   defineAdapter,
   type GeneratedFile,
 } from "./adapter.ts";
-import { pascalCase, renderInterface } from "./render.ts";
+import { renderInterface } from "./render.ts";
+import { renderDataModels, renderFieldSchema } from "./schema-render.ts";
 
 const quote = Schema.encodeSync(Schema.parseJson(Schema.String));
-
-const schemaFor = (field: FieldIr): string => {
-  let schema: string;
-  switch (field.kind) {
-    case "integer":
-      schema = "Schema.Number.pipe(Schema.int())";
-      break;
-    case "number":
-      schema = "Schema.Number";
-      break;
-    case "boolean":
-      schema = "Schema.Boolean";
-      break;
-    case "reference":
-      schema = Option.contains(field.referenceValueKind, "integer")
-        ? "Schema.Number.pipe(Schema.int())"
-        : "Schema.String";
-      break;
-    case "enum":
-      schema = `Schema.Literal(${field.enumValues.map(({ value }) => quote(value)).join(", ")})`;
-      break;
-    case "email":
-      schema = "Schema.String.pipe(Schema.pattern(/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/))";
-      break;
-    case "url":
-      schema = "Schema.String.pipe(Schema.pattern(/^https?:\\/\\//))";
-      break;
-    case "date":
-      schema = "Schema.String.pipe(Schema.pattern(/^\\d{4}-\\d{2}-\\d{2}$/))";
-      break;
-    case "time":
-      schema = "Schema.String.pipe(Schema.pattern(/^\\d{2}:\\d{2}(?::\\d{2})?$/))";
-      break;
-    case "datetime":
-      schema = "Schema.DateTimeUtc";
-      break;
-    case "string":
-    case "markdown":
-    case "html":
-    case "csv": {
-      const filters: Array<string> = [];
-      if (Option.isSome(field.constraints.minLength))
-        filters.push(`Schema.minLength(${field.constraints.minLength.value})`);
-      if (Option.isSome(field.constraints.maxLength))
-        filters.push(`Schema.maxLength(${field.constraints.maxLength.value})`);
-      if (Option.isSome(field.constraints.pattern))
-        filters.push(
-          `Schema.pattern(compileRegularExpression(${quote(field.constraints.pattern.value)}))`,
-        );
-      schema = "Schema.String";
-      if (filters.length > 0) schema = `${schema}.pipe(${filters.join(", ")})`;
-    }
-  }
-  if (field.kind === "integer" || field.kind === "number") {
-    const filters: Array<string> = [];
-    if (Option.isSome(field.constraints.minimum))
-      filters.push(`Schema.greaterThanOrEqualTo(${field.constraints.minimum.value})`);
-    if (Option.isSome(field.constraints.maximum))
-      filters.push(`Schema.lessThanOrEqualTo(${field.constraints.maximum.value})`);
-    if (filters.length > 0) schema = `${schema}.pipe(${filters.join(", ")})`;
-  }
-  if (field.nullable) schema = `Schema.NullOr(${schema})`;
-  if (!field.required) schema = `Schema.optionalWith(${schema}, { as: "Option" })`;
-  return schema;
-};
-
-const renderSchemas = (api: ApiIr): string =>
-  api.resources
-    .map((resource) => {
-      const fields = resource.fields
-        .map((field) => `  ${field.name}: ${schemaFor(field)},`)
-        .join("\n");
-      const writable = resource.fields
-        .filter(({ readOnly }) => !readOnly)
-        .map((field) => `  ${field.name}: ${schemaFor(field)},`)
-        .join("\n");
-      return `export const ${pascalCase(resource.name)}Schema = Schema.Struct({\n${fields}\n});\nexport const ${pascalCase(resource.name)}Input = Schema.Struct({\n${writable}\n});`;
-    })
-    .join("\n\n");
 
 const renderAuth = (api: ApiIr): string => {
   const auth = api.api.auth;
@@ -104,6 +26,16 @@ const renderAuth = (api: ApiIr): string => {
   return `${readSecret}\n    clientRequest = HttpClientRequest.setUrlParam(clientRequest, ${quote(auth.name)}, secret);`;
 };
 
+const renderHeaders = (api: ApiIr): string =>
+  api.api.headers
+    .map((header, index) => {
+      if (header.source === "literal") {
+        return `clientRequest = HttpClientRequest.setHeader(clientRequest, ${quote(header.name)}, ${quote(header.value)});`;
+      }
+      return `const headerSecret${index} = Redacted.value(yield* Config.redacted(${quote(header.environmentVariable)}));\n    clientRequest = HttpClientRequest.setHeader(clientRequest, ${quote(header.name)}, headerSecret${index});`;
+    })
+    .join("\n    ");
+
 const server = (
   api: ApiIr,
 ): string => `import { FetchHttpClient, HttpClient, HttpClientRequest, HttpRouter, HttpServer, HttpServerRequest, HttpServerResponse } from "@effect/platform";
@@ -114,6 +46,19 @@ import { operations } from "./operations.ts";
 import { makeUrl } from "./libraries/url.ts";
 
 const upstream = ${quote(api.api.baseUrl)};
+const UnknownRecord = Schema.Record({ key: Schema.String, value: Schema.Unknown });
+
+const atPath = (input: unknown, path: string): Option.Option<unknown> => {
+  if (path === "$") return Option.some(input);
+  const segments = path.replace(/^\\$\\.?/, "").split(".").filter((segment) => segment.length > 0);
+  let current = Option.some(input);
+  for (const segment of segments) {
+    current = Option.flatMap(current, (value) =>
+      Option.flatMap(Schema.decodeUnknownOption(UnknownRecord)(value), (record) => Option.fromNullable(record[segment])),
+    );
+  }
+  return current;
+};
 
 const json = (value: unknown, status = 200) =>
   HttpServerResponse.json(value, {
@@ -134,6 +79,11 @@ const handler =
     if (Option.isNone(resourceOption)) return yield* json({ error: "Unknown resource" }, 404);
     const resource = resourceOption.value;
     const id = EffectArray.get(segments, 2).pipe(Option.filter((value) => value.length > 0));
+    const schemaName = resourceName.slice(0, 1).toUpperCase() + resourceName.slice(1) + "Schema";
+    const schemaOption = Option.fromNullable(Models[schemaName as keyof typeof Models]).pipe(
+      Option.map((schema) => schema as unknown as Schema.Schema<Readonly<Record<string, unknown>>, unknown, never>),
+    );
+    if (Option.isNone(schemaOption)) return yield* json({ error: "Missing resource schema" }, 500);
 
     const operationOption = Option.isNone(id)
       ? request.method === "GET" ? resource.list : request.method === "POST" ? resource.create : { _id: "Option", _tag: "None" } as const
@@ -150,24 +100,33 @@ const handler =
     );
 
     ${renderAuth(api)}
+    ${renderHeaders(api)}
 
     if (request.method !== "GET" && request.method !== "DELETE") {
       const raw = yield* request.json;
-      const schemaName = resourceName.slice(0, 1).toUpperCase() + resourceName.slice(1) + "Input";
-      const schemaOption = Option.fromNullable(Models[schemaName as keyof typeof Models]).pipe(
+      const inputSchemaName = resourceName.slice(0, 1).toUpperCase() + resourceName.slice(1) + "Input";
+      const inputSchemaOption = Option.fromNullable(Models[inputSchemaName as keyof typeof Models]).pipe(
         Option.map((schema) => schema as Schema.Schema<unknown, unknown, never>),
       );
-      if (Option.isNone(schemaOption)) return yield* json({ error: "Missing input schema" }, 500);
-      const validated = yield* Schema.decodeUnknown(schemaOption.value)(raw, {
+      if (Option.isNone(inputSchemaOption)) return yield* json({ error: "Missing input schema" }, 500);
+      const validated = yield* Schema.decodeUnknown(inputSchemaOption.value)(raw, {
         errors: "all",
         onExcessProperty: "error",
       });
-      const encoded = yield* Schema.encodeUnknown(schemaOption.value)(validated);
+      const encoded = yield* Schema.encodeUnknown(inputSchemaOption.value)(validated);
       clientRequest = yield* HttpClientRequest.bodyJson(clientRequest, encoded);
     }
 
     const response = yield* client.execute(clientRequest);
     const payload = yield* response.json;
+    if (request.method === "GET" && Option.isNone(id)) {
+      if (resource.list._tag === "None") return yield* json({ error: "Missing list operation" }, 500);
+      const items = atPath(payload, resource.list.value.pagination.response.itemsPath);
+      if (Option.isNone(items)) return yield* json({ error: "Collection items path is missing" }, 502);
+      yield* Schema.decodeUnknown(Schema.Array(schemaOption.value))(items.value, { errors: "all", onExcessProperty: "error" });
+    } else if (request.method !== "DELETE") {
+      yield* Schema.decodeUnknown(schemaOption.value)(payload, { errors: "all", onExcessProperty: "error" });
+    }
     return yield* json(payload, response.status);
   }).pipe(
     Effect.tapError(Effect.logError),
@@ -189,8 +148,8 @@ BunRuntime.runMain(
 `;
 
 export const backendUnits = {
-  renderFieldSchema: schemaFor,
-  renderDataModels: renderSchemas,
+  renderFieldSchema,
+  renderDataModels,
   renderDataTransfer: (resource: ResourceIr) => renderInterface(resource),
   renderEndpointManifest: (api: ApiIr) =>
     Effect.gen(function* () {
@@ -261,7 +220,7 @@ export const backendAdapter = defineAdapter({
         },
         {
           path: "server/src/models.ts",
-          contents: `import { Schema } from "effect";\nimport { compileRegularExpression } from "./libraries/regular-expression.ts";\n\n${backendUnits.renderDataModels(api)}\n`,
+          contents: `import { Array as EffectArray, Schema } from "effect";\nimport { compileRegularExpression } from "./libraries/regular-expression.ts";\n\n${backendUnits.renderDataModels(api)}\n`,
         },
         {
           path: "server/src/types.ts",
@@ -269,7 +228,19 @@ export const backendAdapter = defineAdapter({
         },
         {
           path: "server/src/operations.ts",
-          contents: `interface Operation { readonly method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"; readonly path: string; readonly [key: string]: unknown }\ntype Maybe<Value> = { readonly _id: string; readonly _tag: "None" } | { readonly _id: string; readonly _tag: "Some"; readonly value: Value }\ninterface ResourceOperations { readonly list: Maybe<Operation>; readonly get: Maybe<Operation>; readonly create: Maybe<Operation>; readonly update: Maybe<Operation>; readonly delete: Maybe<Operation>; readonly search: Maybe<Operation> }\nexport const operations: Record<string, ResourceOperations> = ${routes};\n`,
+          contents: `interface Operation { readonly method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"; readonly path: string }
+type ResponseItems = { readonly itemsPath: string };
+type Pagination =
+  | { readonly type: "none"; readonly response: ResponseItems }
+  | { readonly type: "offset"; readonly offsetParameter: string; readonly limitParameter: string; readonly defaultLimit: number; readonly response: ResponseItems & { readonly end: { readonly type: "shortPage" } | { readonly type: "totalItems"; readonly totalItemsPath: string } } }
+  | { readonly type: "cursor"; readonly cursorParameter: string; readonly limitParameter: string; readonly nextCursorPath: string; readonly defaultLimit: number; readonly response: ResponseItems }
+  | { readonly type: "page"; readonly pageParameter: string; readonly sizeParameter: string; readonly defaultSize: number; readonly firstPage: number; readonly response: ResponseItems & { readonly totalPagesPath: string } };
+interface ListOperation extends Operation { readonly method: "GET"; readonly pagination: Pagination }
+interface SearchOperation extends ListOperation { readonly queryParameter: string }
+type Maybe<Value> = { readonly _id: "Option"; readonly _tag: "None" } | { readonly _id: "Option"; readonly _tag: "Some"; readonly value: Value }
+interface ResourceOperations { readonly list: Maybe<ListOperation>; readonly get: Maybe<Operation>; readonly create: Maybe<Operation>; readonly update: Maybe<Operation>; readonly delete: Maybe<Operation>; readonly search: Maybe<SearchOperation> }
+export const operations: Record<string, ResourceOperations> = ${routes};
+`,
         },
         {
           path: "server/src/libraries/url.ts",

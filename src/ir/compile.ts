@@ -40,10 +40,20 @@ const editorFor = (field: ContractField): EditorKind => {
       return "richText";
     case "csv":
       return "table";
+    case "code":
+      return "code";
     case "url":
       return "url";
     case "email":
       return "email";
+    case "phone":
+      return "phone";
+    case "password":
+      return "password";
+    case "image":
+      return "image";
+    case "uuid":
+      return "uuid";
     case "date":
       return "date";
     case "time":
@@ -59,6 +69,22 @@ const editorFor = (field: ContractField): EditorKind => {
       return "select";
     case "reference":
       return "resourceSelect";
+    case "array":
+      switch (field.items.type) {
+        case "enum":
+          return "multiSelect";
+        case "reference":
+          return "resourceMultiSelect";
+        case "string":
+        case "integer":
+        case "number":
+        case "boolean":
+        case "url":
+        case "email":
+        case "phone":
+        case "uuid":
+          return "repeatable";
+      }
   }
 };
 
@@ -69,6 +95,9 @@ const fieldToIr = (field: ContractField): FieldIr => {
     pattern: "pattern" in field ? field.pattern : Option.none(),
     minimum: "minimum" in field ? field.minimum : Option.none(),
     maximum: "maximum" in field ? field.maximum : Option.none(),
+    minItems: "minItems" in field ? field.minItems : Option.none(),
+    maxItems: "maxItems" in field ? field.maxItems : Option.none(),
+    uniqueItems: "uniqueItems" in field ? Option.getOrElse(field.uniqueItems, () => false) : false,
   };
 
   return {
@@ -79,11 +108,24 @@ const fieldToIr = (field: ContractField): FieldIr => {
     editor: editorFor(field),
     required: field.required,
     readOnly: Option.getOrElse(field.readOnly, () => false),
+    writeOnly: Option.getOrElse(field.writeOnly, () => false),
     nullable: Option.getOrElse(field.nullable, () => false),
     constraints,
     enumValues: field.type === "enum" ? field.values : [],
     referencedResource: field.type === "reference" ? Option.some(field.resource) : Option.none(),
     referenceValueKind: field.type === "reference" ? Option.some(field.valueType) : Option.none(),
+    language: "language" in field ? field.language : Option.none(),
+    arrayElement:
+      field.type === "array"
+        ? Option.some({
+            kind: field.items.type,
+            enumValues: field.items.type === "enum" ? field.items.values : [],
+            referencedResource:
+              field.items.type === "reference" ? Option.some(field.items.resource) : Option.none(),
+            referenceValueKind:
+              field.items.type === "reference" ? Option.some(field.items.valueType) : Option.none(),
+          })
+        : Option.none(),
   };
 };
 
@@ -96,13 +138,14 @@ const paginationToIr = (pagination: ListOperation | SearchOperation): Pagination
   const value = pagination.pagination;
   switch (value.type) {
     case "none":
-      return { type: "none" };
+      return { type: "none", response: value.response };
     case "offset":
       return {
         type: "offset",
         offsetParameter: value.offsetParameter,
         limitParameter: value.limitParameter,
         defaultLimit: value.defaultLimit,
+        response: value.response,
       };
     case "cursor":
       return {
@@ -110,8 +153,8 @@ const paginationToIr = (pagination: ListOperation | SearchOperation): Pagination
         cursorParameter: value.cursorParameter,
         limitParameter: value.limitParameter,
         nextCursorPath: value.nextCursorPath,
-        itemsPath: value.itemsPath,
         defaultLimit: value.defaultLimit,
+        response: value.response,
       };
     case "page":
       return {
@@ -119,6 +162,8 @@ const paginationToIr = (pagination: ListOperation | SearchOperation): Pagination
         pageParameter: value.pageParameter,
         sizeParameter: value.sizeParameter,
         defaultSize: value.defaultSize,
+        firstPage: value.firstPage,
+        response: value.response,
       };
   }
 };
@@ -128,6 +173,13 @@ const validateSemantics = (
 ): Effect.Effect<void, ContractValidationError, RegularExpression> =>
   Effect.gen(function* () {
     const regularExpression = yield* RegularExpression;
+    const duplicateHeaders = duplicates(contract.api.headers.map(({ name }) => name.toLowerCase()));
+    if (duplicateHeaders.length > 0) {
+      return yield* new ContractValidationError({
+        message: `Duplicate API headers: ${duplicateHeaders.join(", ")}`,
+        cause: Option.none(),
+      });
+    }
     const duplicateResources = duplicates(contract.resources.map(({ name }) => name));
     if (duplicateResources.length > 0) {
       return yield* new ContractValidationError({
@@ -155,6 +207,49 @@ const validateSemantics = (
         });
       }
       for (const field of resource.fields) {
+        if (
+          Option.getOrElse(field.readOnly, () => false) &&
+          Option.getOrElse(field.writeOnly, () => false)
+        ) {
+          return yield* new ContractValidationError({
+            message: `Field ${resource.name}.${field.name} cannot be both readOnly and writeOnly`,
+            cause: Option.none(),
+          });
+        }
+        if (
+          "minLength" in field &&
+          Option.isSome(field.minLength) &&
+          Option.isSome(field.maxLength) &&
+          field.minLength.value > field.maxLength.value
+        ) {
+          return yield* new ContractValidationError({
+            message: `Field ${resource.name}.${field.name} has minLength greater than maxLength`,
+            cause: Option.none(),
+          });
+        }
+        if (
+          field.type === "array" &&
+          Option.isSome(field.minItems) &&
+          Option.isSome(field.maxItems) &&
+          field.minItems.value > field.maxItems.value
+        ) {
+          return yield* new ContractValidationError({
+            message: `Field ${resource.name}.${field.name} has minItems greater than maxItems`,
+            cause: Option.none(),
+          });
+        }
+        const enumValues =
+          field.type === "enum"
+            ? field.values.map(({ value }) => value)
+            : field.type === "array" && field.items.type === "enum"
+              ? field.items.values.map(({ value }) => value)
+              : [];
+        if (duplicates(enumValues).length > 0) {
+          return yield* new ContractValidationError({
+            message: `Field ${resource.name}.${field.name} has duplicate enum values`,
+            cause: Option.none(),
+          });
+        }
         if ("pattern" in field && Option.isSome(field.pattern)) {
           yield* regularExpression.compile(field.pattern.value).pipe(
             Effect.mapError(
@@ -169,6 +264,16 @@ const validateSemantics = (
         if (field.type === "reference" && !HashMap.has(resources, field.resource)) {
           return yield* new ContractValidationError({
             message: `Field ${resource.name}.${field.name} references unknown resource ${field.resource}`,
+            cause: Option.none(),
+          });
+        }
+        if (
+          field.type === "array" &&
+          field.items.type === "reference" &&
+          !HashMap.has(resources, field.items.resource)
+        ) {
+          return yield* new ContractValidationError({
+            message: `Field ${resource.name}.${field.name} references unknown resource ${field.items.resource}`,
             cause: Option.none(),
           });
         }
@@ -235,6 +340,7 @@ export const compileContract = (
           description: contract.api.description,
           baseUrl: contract.api.baseUrl,
           auth: contract.api.auth,
+          headers: contract.api.headers,
         },
         resources: contract.resources.map(resourceToIr),
       }).pipe(
