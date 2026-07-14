@@ -19,6 +19,7 @@ bun run check:commit
 2. Find the smallest owning module and place unit tests in its adjacent `__tests__` directory.
 3. Decide which Schema owns every new input, output, error, or domain value.
 4. If adding a domain variant, update every exhaustive adapter capability and renderer.
+5. For a new stack flavor, read the [adapter authoring guide](./doc/adapters.md) and start inside `src/adapters`.
 
 ## Engineering rules
 
@@ -30,6 +31,7 @@ bun run check:commit
 - Put throwing third-party/native calls behind a typed service in `src/libraries` and preserve their parameter types.
 - Do not add generic adapter fallbacks. An unsupported variant must fail explicitly.
 - Keep services and use cases small, composable, and independently testable.
+- Keep stack syntax and template decisions inside adapters. Core compiler, CLI, and generator SDK code must remain stack-neutral.
 
 ## Tests
 

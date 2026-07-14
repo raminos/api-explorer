@@ -45,7 +45,10 @@ bun run dev
 ## CLI
 
 ```sh
-api-explorer generate <contract> [--target all|server|web] [--output <directory>]
+api-explorer adapters
+api-explorer generate <contract> [--target all|server|web] \
+  [--backend effect-bun] [--frontend tanstack-shadcn] \
+  [--output <directory>]
 ```
 
 During development, invoke the source entrypoint directly:
@@ -57,6 +60,8 @@ bun run src/cli.ts generate examples/jsonplaceholder/api-explorer.json \
 ```
 
 Every argument and option is parsed by Effect CLI and decoded again through the application input schema. Unknown targets, blank paths, malformed contracts, unknown JSON properties, invalid relationships, and unsupported adapter variants fail explicitly.
+
+Backend and frontend adapters are independent, mix-and-match flavors that implement the same versioned JSON explorer protocol. Contributors own their templates and primitives; the CLI only selects adapters and composes their validated files.
 
 ## What gets generated
 
@@ -85,9 +90,10 @@ Key directories:
 
 ```text
 src/application/   Small use-case services
+src/adapters/      Contributor-authored backend and frontend flavors
 src/cli/           CLI command, input schema, runtime composition
 src/contract/      Public versioned contract schemas
-src/generator/     Adapter contracts and built-in targets
+src/generator/     Stack-neutral adapter SDK, protocol, and file writer
 src/ir/            Normalized schema-backed representation
 src/libraries/     Typed Effect wrappers for unsafe libraries
 src/verification/  Deterministic generated-project verification
@@ -111,6 +117,7 @@ Lefthook runs `check:commit` before every commit. CI runs the same command. Test
 - [Architecture](./doc/architecture.md)
 - [Effect guidelines](./doc/effect-guidelines.md)
 - [Adapter guide](./doc/adapters.md)
+- [Explorer protocol](./doc/explorer-protocol.md)
 - [Testing policy](./doc/testing.md)
 - [Roadmap](./doc/roadmap.md)
 - [Contributing](./CONTRIBUTING.md)

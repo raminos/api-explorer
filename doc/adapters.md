@@ -1,26 +1,53 @@
-# Adapter guide
+# Adapter authoring guide
 
-A generator adapter implements `GeneratorAdapter` from `src/generator/adapter.ts`. Its capability record is deliberately exhaustive:
+API Explorer has a stack-neutral compiler and generator SDK. Contributors—not CLI users—author adapters for concrete stack flavors. Users select a registered backend and frontend independently.
 
-```ts
-interface GeneratorAdapter {
-  readonly capabilities: {
-    readonly contractVersions: Record<ContractVersion, true>;
-    readonly fieldKinds: Record<FieldKind, true>;
-    readonly editorKinds: Record<EditorKind, true>;
-  };
-  readonly units: BackendAdapterUnits | FrontendAdapterUnits;
-  readonly name: string;
-  readonly generate: (
-    api: ApiIr,
-  ) => Effect.Effect<ReadonlyArray<GeneratedFile>, GenerationError, Json>;
-}
+## Composition model
+
+```text
+validated IR
+  -> selected backend adapter -> ordered backend primitives -> backend files
+  -> selected frontend adapter -> ordered frontend primitives -> frontend files
 ```
 
-Schema rendering is a shared atomic unit used by both built-in targets. Backend units separately render data models, transfer types, endpoint manifests, and transport/application code. Frontend units separately render transfer types, runtime schemas, resource metadata, the API client, create/update form, table, pagination controls, page, and application shell. The built-in adapters compose these same public units; they are not documentation-only hooks.
+The CLI chooses adapter IDs and invokes `generate`. It does not inspect templates, inject language fragments, parse generated code, or know how React components, FastAPI routes, Go handlers, Effect endpoints, or Bun servers are written.
 
-Keep rendering pure except for injected library services: return relative paths and contents, and let `writeGeneratedFiles` perform filesystem effects. Stable output makes adapters straightforward to unit test and allows a future dry-run/diff workflow.
+`defineAdapter` requires:
 
-An adapter should expose small integration points before complete entrypoints. For a backend, prefer schemas, types, handlers, routes, and then the server. For a frontend, prefer types, client functions, resource primitives, pages, and then the application shell.
+- schema-validated metadata with stable ID, kind, name, and description;
+- exhaustive contract, explorer-protocol, and field capabilities;
+- exhaustive editor capabilities for frontend adapters only;
+- public stack-specific rendering units;
+- an ordered, non-empty tuple of named primitives.
 
-There are no fallback renderers. Every domain field/editor kind must have an explicit implementation, and adding a new kind causes adapter compilation to fail. Unsupported methods or resources produce explicit errors. Adapters must not read secrets; generated servers use redacted Effect configuration at runtime. Adapters render resources in input order and sort derived unordered values before emitting output.
+`definePrimitive` wraps a file-producing Effect. The SDK validates paths and contents after every primitive. Composition is deterministic and rejects duplicate primitive IDs and duplicate output paths.
+
+## Primitive granularity
+
+A primitive should own one independently understandable generated layer. Recommended backend primitives are project configuration, models/schemas, operation manifests, handlers, routing, transport, and server entrypoint. Recommended frontend primitives are project configuration, runtime contracts, API client, semantic fields, resource components, pages, and application shell.
+
+Primitives may emit multiple files when those files form one atomic layer. They should not communicate through mutable state or read files emitted by earlier primitives. They all receive the same schema-validated `ApiIr`, so generation order affects output ordering but not behavior.
+
+Adapters expose their smaller pure units in addition to complete primitives. This lets another flavor reuse a deliberate helper or replace one layer without copying a monolithic generator.
+
+## Flavors and registration
+
+An adapter ID identifies an opinionated flavor, not merely a language:
+
+- `effect-bun`
+- `fastapi-pydantic`
+- `fastapi-sqlmodel`
+- `go-chi-sqlc`
+- `tanstack-shadcn`
+
+Add built-ins to `src/adapters/index.ts`. The registry validates unique IDs and exposes metadata through `api-explorer adapters`. Generation accepts `--backend` and `--frontend`; `--target` still permits generating only one side.
+
+Backend and frontend implementations are mixable because both declare an [explorer JSON protocol](./explorer-protocol.md), not because the core understands either generated stack.
+
+## Failure policy
+
+There are no generic renderers or implicit fallbacks. Adding a contract field kind, frontend editor kind, contract version, or protocol version breaks exhaustive capabilities until each adapter explicitly supports it. Unsupported adapter IDs, invalid metadata, unsafe paths, invalid files, and collisions fail generation.
+
+Adapter-specific libraries and services stay within the adapter boundary. Provide required layers inside primitives so the registry remains unaware of template engines and target frameworks. Keep output deterministic and test units without filesystem writes.
+
+The contributor-oriented quick start and minimal adapter example live in [`src/adapters/README.md`](../src/adapters/README.md).

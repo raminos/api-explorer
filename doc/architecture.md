@@ -12,9 +12,11 @@ versioned JSON -> Effect Schema decode -> semantic validation -> normalized IR -
 
 `src/ir` owns cross-resource semantic checks and normalization. The IR itself is defined with Effect Schema, not handwritten interfaces. Compilation verifies unique resources and fields, ID fields, regular expressions, references, and relationship endpoints, then decodes the produced IR again. Adapters consume only this validated representation.
 
-`src/application` contains small composable use-case services: contract compilation, adapter selection, and project generation. The CLI only parses arguments, invokes the use case, and logs through Effect.
+`src/application` contains small composable use-case services: contract compilation, adapter selection, and project generation. Backend and frontend adapter IDs are selected independently. The CLI only parses arguments, invokes the use case, and logs through Effect.
 
-`src/generator` owns the adapter interfaces, built-in targets, and deterministic file writing. Every adapter declares complete contract-version, field-kind, and editor-kind capabilities. Its atomic units render data models, transfer types, endpoint manifests, transports, forms, tables, pages, and application shells. Generated files are schema-validated before filesystem effects happen.
+`src/generator` is stack-neutral. It owns the adapter SDK, versioned explorer protocol, primitive composition, and deterministic file writing. It contains no target-language or framework templates. Generated files are schema-validated before filesystem effects happen.
+
+`src/adapters` owns contributor-authored stack flavors. Every adapter declares complete contract, protocol, and field capabilities; frontend adapters additionally declare editor capabilities. Named primitives render cohesive layers such as project files, models, operations, transports, clients, components, pages, and shells. The registry composes files without understanding their source code.
 
 `src/libraries` is the only boundary for non-Effect libraries that can throw. Wrappers preserve native parameter types with `Parameters` or `ConstructorParameters`, return typed Effects, and have co-located tests.
 
