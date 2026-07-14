@@ -1,15 +1,15 @@
 import { Effect, Option, Schema } from "effect";
-import { GenerationError } from "../domain/errors.ts";
-import type { ApiIr, ResourceIr } from "../ir/model.ts";
-import { Json } from "../libraries/json.ts";
+import { GenerationError } from "../../../domain/errors.ts";
 import {
-  type BackendAdapterUnits,
-  completeCapabilities,
+  completeBackendCapabilities,
   defineAdapter,
+  definePrimitive,
   type GeneratedFile,
-} from "./adapter.ts";
-import { renderInterface } from "./render.ts";
-import { renderDataModels, renderFieldSchema } from "./schema-render.ts";
+} from "../../../generator/adapter.ts";
+import type { ApiIr, ResourceIr } from "../../../ir/model.ts";
+import { Json } from "../../../libraries/json.ts";
+import { renderDataModels, renderFieldSchema } from "../../shared/effect-schema.ts";
+import { renderInterface } from "../../shared/typescript.ts";
 
 const quote = Schema.encodeSync(Schema.parseJson(Schema.String));
 
@@ -147,6 +147,16 @@ BunRuntime.runMain(
 );
 `;
 
+export interface EffectBunUnits {
+  readonly renderFieldSchema: typeof renderFieldSchema;
+  readonly renderDataModels: typeof renderDataModels;
+  readonly renderDataTransfer: (resource: ResourceIr) => string;
+  readonly renderEndpointManifest: (
+    api: ApiIr,
+  ) => Effect.Effect<string, import("../../../libraries/errors.ts").LibraryError, Json>;
+  readonly renderTransport: (api: ApiIr) => string;
+}
+
 export const backendUnits = {
   renderFieldSchema,
   renderDataModels,
@@ -161,16 +171,13 @@ export const backendUnits = {
       );
     }),
   renderTransport: server,
-} satisfies BackendAdapterUnits;
+} satisfies EffectBunUnits;
 
-export const backendAdapter = defineAdapter({
-  name: "effect-bun",
-  capabilities: completeCapabilities,
-  units: backendUnits,
-  generate: (api) =>
+export const projectPrimitive = definePrimitive(
+  { id: "project", description: "Render the Bun package and strict TypeScript project" },
+  (api) =>
     Effect.gen(function* () {
       const json = yield* Json;
-      const routes = yield* backendUnits.renderEndpointManifest(api);
       const packageJson = yield* json.stringify(
         {
           name: `${api.api.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-server`,
@@ -218,14 +225,39 @@ export const backendAdapter = defineAdapter({
           path: "server/tsconfig.json",
           contents: `${tsconfig}\n`,
         },
-        {
-          path: "server/src/models.ts",
-          contents: `import { Array as EffectArray, Schema } from "effect";\nimport { compileRegularExpression } from "./libraries/regular-expression.ts";\n\n${backendUnits.renderDataModels(api)}\n`,
-        },
-        {
-          path: "server/src/types.ts",
-          contents: `import type { Option } from "effect";\n\n${api.resources.map(backendUnits.renderDataTransfer).join("\n\n")}\n`,
-        },
+      ] satisfies ReadonlyArray<GeneratedFile>;
+    }).pipe(
+      Effect.mapError(
+        (cause) =>
+          new GenerationError({
+            message: "Effect/Bun project primitive could not encode JSON",
+            cause: Option.some(cause),
+          }),
+      ),
+      Effect.provide(Json.Default),
+    ),
+);
+
+export const modelsPrimitive = definePrimitive(
+  { id: "models", description: "Render resource schemas and transfer types" },
+  (api) =>
+    Effect.succeed([
+      {
+        path: "server/src/models.ts",
+        contents: `import { Array as EffectArray, Schema } from "effect";\nimport { compileRegularExpression } from "./libraries/regular-expression.ts";\n\n${backendUnits.renderDataModels(api)}\n`,
+      },
+      {
+        path: "server/src/types.ts",
+        contents: `import type { Option } from "effect";\n\n${api.resources.map(backendUnits.renderDataTransfer).join("\n\n")}\n`,
+      },
+    ]),
+);
+
+export const operationsPrimitive = definePrimitive(
+  { id: "operations", description: "Render the typed upstream operation manifest" },
+  (api) =>
+    backendUnits.renderEndpointManifest(api).pipe(
+      Effect.map((routes) => [
         {
           path: "server/src/operations.ts",
           contents: `interface Operation { readonly method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"; readonly path: string }
@@ -242,23 +274,42 @@ interface ResourceOperations { readonly list: Maybe<ListOperation>; readonly get
 export const operations: Record<string, ResourceOperations> = ${routes};
 `,
         },
-        {
-          path: "server/src/libraries/url.ts",
-          contents: `import { Effect, Schema } from "effect";\n\nexport class UrlError extends Schema.TaggedError<UrlError>()("UrlError", { cause: Schema.Unknown }) {}\n\nexport const makeUrl = (...parameters: ConstructorParameters<typeof URL>) =>\n  Effect.try({\n    try: () => new URL(...parameters),\n    catch: (cause) => new UrlError({ cause }),\n  });\n`,
-        },
-        {
-          path: "server/src/libraries/regular-expression.ts",
-          contents: `import { Effect, Schema } from "effect";\n\nclass RegularExpressionError extends Schema.TaggedError<RegularExpressionError>()("RegularExpressionError", { cause: Schema.Unknown }) {}\n\nexport const compileRegularExpression = (...parameters: ConstructorParameters<typeof RegExp>): RegExp =>\n  Effect.runSync(Effect.try({\n    try: () => new RegExp(...parameters),\n    catch: (cause) => new RegularExpressionError({ cause }),\n  }));\n`,
-        },
-        { path: "server/src/server.ts", contents: backendUnits.renderTransport(api) },
-      ] satisfies ReadonlyArray<GeneratedFile>;
-    }).pipe(
+      ]),
       Effect.mapError(
         (cause) =>
           new GenerationError({
-            message: "Backend adapter could not encode JSON",
+            message: "Effect/Bun operation primitive could not encode JSON",
             cause: Option.some(cause),
           }),
       ),
+      Effect.provide(Json.Default),
     ),
+);
+
+export const transportPrimitive = definePrimitive(
+  { id: "transport", description: "Render Effect HTTP transport and safe library boundaries" },
+  (api) =>
+    Effect.succeed([
+      {
+        path: "server/src/libraries/url.ts",
+        contents: `import { Effect, Schema } from "effect";\n\nexport class UrlError extends Schema.TaggedError<UrlError>()("UrlError", { cause: Schema.Unknown }) {}\n\nexport const makeUrl = (...parameters: ConstructorParameters<typeof URL>) =>\n  Effect.try({\n    try: () => new URL(...parameters),\n    catch: (cause) => new UrlError({ cause }),\n  });\n`,
+      },
+      {
+        path: "server/src/libraries/regular-expression.ts",
+        contents: `import { Effect, Schema } from "effect";\n\nclass RegularExpressionError extends Schema.TaggedError<RegularExpressionError>()("RegularExpressionError", { cause: Schema.Unknown }) {}\n\nexport const compileRegularExpression = (...parameters: ConstructorParameters<typeof RegExp>): RegExp =>\n  Effect.runSync(Effect.try({\n    try: () => new RegExp(...parameters),\n    catch: (cause) => new RegularExpressionError({ cause }),\n  }));\n`,
+      },
+      { path: "server/src/server.ts", contents: backendUnits.renderTransport(api) },
+    ]),
+);
+
+export const backendAdapter = defineAdapter({
+  metadata: {
+    id: "effect-bun",
+    kind: "backend",
+    displayName: "Effect/Bun",
+    description: "Strict Effect HTTP proxy running on Bun",
+  },
+  capabilities: completeBackendCapabilities,
+  units: backendUnits,
+  primitives: [projectPrimitive, modelsPrimitive, operationsPrimitive, transportPrimitive],
 });

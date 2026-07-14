@@ -1,13 +1,13 @@
 import { Effect, Schema } from "effect";
 import { readContract } from "../contract/parse.ts";
 import { writeGeneratedFiles } from "../generator/write.ts";
-import { AdapterRegistry, GenerationTargetSchema } from "./adapter-registry.ts";
+import { AdapterRegistry, AdapterSelectionSchema } from "./adapter-registry.ts";
 import { ContractCompiler } from "./contract-compiler.ts";
 
 export const GenerateProjectInputSchema = Schema.Struct({
   contractPath: Schema.NonEmptyTrimmedString,
   output: Schema.NonEmptyTrimmedString,
-  target: GenerationTargetSchema,
+  ...AdapterSelectionSchema.fields,
 });
 export type GenerateProjectInput = typeof GenerateProjectInputSchema.Type;
 
@@ -28,7 +28,7 @@ export class GenerateProject extends Effect.Service<GenerateProject>()(
             const validatedInput = yield* decodeInput(input);
             const contract = yield* readContract(validatedInput.contractPath);
             const api = yield* compiler.compile(contract);
-            const files = yield* adapters.generate(validatedInput.target, api);
+            const files = yield* adapters.generate(validatedInput, api);
             return yield* writeGeneratedFiles(validatedInput.output, files);
           }),
       } as const;

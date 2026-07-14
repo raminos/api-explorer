@@ -1,6 +1,6 @@
 import { Option, Schema } from "effect";
-import type { ApiIr, FieldIr } from "../ir/model.ts";
-import { pascalCase } from "./render.ts";
+import type { ApiIr, FieldIr } from "../../ir/model.ts";
+import { pascalCase } from "./typescript.ts";
 
 const quote = Schema.encodeSync(Schema.parseJson(Schema.String));
 

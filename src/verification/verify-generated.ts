@@ -34,6 +34,8 @@ const program = Effect.gen(function* () {
     contractPath: path.join(root, "examples", "showcase", "api-explorer.json"),
     output,
     target: "all",
+    backendAdapter: "effect-bun",
+    frontendAdapter: "tanstack-shadcn",
   });
   yield* Effect.logInfo("Generated verification project", { count });
 

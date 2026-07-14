@@ -1,11 +1,11 @@
 import { it } from "@effect/vitest";
 import { Effect, Array as EffectArray, Option } from "effect";
 import { expect } from "vitest";
-import showcaseContract from "../../../examples/showcase/api-explorer.json";
-import { parseContract } from "../../contract/parse.ts";
-import { compileContract } from "../../ir/compile.ts";
-import { RegularExpression } from "../../libraries/regular-expression.ts";
-import { renderDataModels, renderFieldSchema } from "../schema-render.ts";
+import showcaseContract from "../../../../examples/showcase/api-explorer.json";
+import { parseContract } from "../../../contract/parse.ts";
+import { compileContract } from "../../../ir/compile.ts";
+import { RegularExpression } from "../../../libraries/regular-expression.ts";
+import { renderDataModels, renderFieldSchema } from "../effect-schema.ts";
 
 it.effect("renders closed arrays and excludes write-only fields from response schemas", () =>
   Effect.gen(function* () {

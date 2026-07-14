@@ -1,15 +1,15 @@
 import { Effect, Option } from "effect";
-import { GenerationError } from "../domain/errors.ts";
-import type { ApiIr, ResourceIr } from "../ir/model.ts";
-import { Json } from "../libraries/json.ts";
+import { GenerationError } from "../../../domain/errors.ts";
 import {
-  completeCapabilities,
+  completeFrontendCapabilities,
   defineAdapter,
-  type FrontendAdapterUnits,
+  definePrimitive,
   type GeneratedFile,
-} from "./adapter.ts";
-import { pascalCase, renderInterface } from "./render.ts";
-import { renderDataModels } from "./schema-render.ts";
+} from "../../../generator/adapter.ts";
+import type { ApiIr, ResourceIr } from "../../../ir/model.ts";
+import { Json } from "../../../libraries/json.ts";
+import { renderDataModels } from "../../shared/effect-schema.ts";
+import { pascalCase, renderInterface } from "../../shared/typescript.ts";
 
 const metadata = (api: ApiIr) =>
   api.resources.map(
@@ -328,6 +328,18 @@ export function App() {
 
 const css = `:root{font-family:Inter,ui-sans-serif,system-ui;color:#172033;background:#f6f7fb}*{box-sizing:border-box}body{margin:0}.shell{display:grid;grid-template-columns:240px 1fr;min-height:100vh}aside{background:#111827;color:white;padding:28px 18px}.brand{font-size:20px;font-weight:750;margin:0 10px 32px}nav{display:grid;gap:6px}nav button{background:transparent;border:0;border-radius:8px;color:#9ca3af;padding:11px;text-align:left}nav button.active,nav button:hover{background:#263246;color:white}main{padding:48px;overflow:hidden}header{margin-bottom:24px}.eyebrow{color:#6366f1;font-weight:700;text-transform:uppercase;letter-spacing:.12em;font-size:12px}h1{font-size:36px;margin:4px 0}.card{background:white;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 1px 2px #0000000a;margin-bottom:24px}.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;padding:20px}.form label{display:grid;gap:7px;font-size:13px;font-weight:650}.form input,.form textarea,.form select{border:1px solid #d1d5db;border-radius:7px;padding:9px;font:inherit}.form textarea{min-height:110px}.form select[multiple]{min-height:120px}.form button,button.danger,button.secondary,.pagination button{align-self:end;border:0;border-radius:7px;padding:10px 14px;background:#4f46e5;color:white}.form-actions,.actions,.array-row,.pagination{display:flex;gap:8px;align-items:center}.array-input{display:grid;gap:8px}.array-row input{flex:1}.nullable{display:flex!important;grid-template-columns:auto 1fr!important;align-items:center;font-weight:400!important}.table-wrap{overflow:auto}table{border-collapse:collapse;width:100%;font-size:14px}th,td{border-bottom:1px solid #eee;padding:13px;text-align:left;max-width:280px}th{background:#fafafa;color:#6b7280;font-size:12px;text-transform:uppercase}pre{overflow:auto;white-space:pre-wrap}.thumbnail{border-radius:8px;display:block;height:48px;object-fit:cover;width:48px}.badges{display:flex;flex-wrap:wrap;gap:4px}.badge{background:#eef2ff;border-radius:999px;color:#3730a3;padding:3px 8px}.pagination{display:flex;justify-content:center;margin:18px 0}.pagination button{background:white;border:1px solid #d1d5db;color:#172033}.pagination button.active{background:#172033;color:white}.pagination button:disabled{cursor:not-allowed;opacity:.45}button.danger{background:#fff1f2;color:#be123c;padding:6px 9px}button.secondary{background:#eef2ff;color:#3730a3;padding:6px 9px}@media(max-width:760px){.shell{grid-template-columns:1fr}aside{padding:16px}.brand{margin-bottom:12px}nav{display:flex;overflow:auto}main{padding:24px}}`;
 
+export interface TanStackShadcnUnits {
+  readonly renderDataTransfer: (resource: ResourceIr) => string;
+  readonly renderResourceMetadata: (
+    api: ApiIr,
+  ) => Effect.Effect<string, import("../../../libraries/errors.ts").LibraryError, Json>;
+  readonly renderApiClient: () => string;
+  readonly renderCreateUpdateForm: () => string;
+  readonly renderResourceTable: () => string;
+  readonly renderResourcePage: () => string;
+  readonly renderApplication: () => string;
+}
+
 export const frontendUnits = {
   renderDataTransfer: (resource: ResourceIr) => renderInterface(resource),
   renderResourceMetadata: (api: ApiIr) =>
@@ -340,16 +352,13 @@ export const frontendUnits = {
   renderResourceTable: () => table,
   renderResourcePage: () => page,
   renderApplication: () => app,
-} satisfies FrontendAdapterUnits;
+} satisfies TanStackShadcnUnits;
 
-export const frontendAdapter = defineAdapter({
-  name: "tanstack-react",
-  capabilities: completeCapabilities,
-  units: frontendUnits,
-  generate: (api) =>
+export const projectPrimitive = definePrimitive(
+  { id: "project", description: "Render the Vite package and strict TypeScript project" },
+  (api) =>
     Effect.gen(function* () {
       const json = yield* Json;
-      const resourceMetadata = yield* frontendUnits.renderResourceMetadata(api);
       const packageJson = yield* json.stringify(
         {
           name: `${api.api.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-web`,
@@ -406,6 +415,25 @@ export const frontendAdapter = defineAdapter({
           path: "web/index.html",
           contents: '<div id="root"></div><script type="module" src="/src/main.tsx"></script>\n',
         },
+      ] satisfies ReadonlyArray<GeneratedFile>;
+    }).pipe(
+      Effect.mapError(
+        (cause) =>
+          new GenerationError({
+            message: "TanStack project primitive could not encode JSON",
+            cause: Option.some(cause),
+          }),
+      ),
+      Effect.provide(Json.Default),
+    ),
+);
+
+export const contractsPrimitive = definePrimitive(
+  { id: "contracts", description: "Render browser schemas, types, and resource metadata" },
+  (api) =>
+    Effect.gen(function* () {
+      const resourceMetadata = yield* frontendUnits.renderResourceMetadata(api);
+      return [
         {
           path: "web/src/types.ts",
           contents: `import type { Option } from "effect";\n\n${api.resources.map(frontendUnits.renderDataTransfer).join("\n\n")}\n`,
@@ -454,33 +482,70 @@ export const compileRegularExpression = (...parameters: ConstructorParameters<ty
   Effect.runSync(Effect.try({ try: () => new RegExp(...parameters), catch: (cause) => new RegularExpressionError({ cause }) }));
 `,
         },
-        { path: "web/src/api.ts", contents: frontendUnits.renderApiClient() },
-        {
-          path: "web/src/components/ResourceForm.tsx",
-          contents: frontendUnits.renderCreateUpdateForm(),
-        },
-        {
-          path: "web/src/components/ResourceTable.tsx",
-          contents: frontendUnits.renderResourceTable(),
-        },
-        {
-          path: "web/src/components/ResourcePage.tsx",
-          contents: frontendUnits.renderResourcePage(),
-        },
-        { path: "web/src/App.tsx", contents: frontendUnits.renderApplication() },
-        { path: "web/src/styles.css", contents: css },
-        {
-          path: "web/src/main.tsx",
-          contents: `import { StrictMode } from "react";\nimport { createRoot } from "react-dom/client";\nimport { QueryClient, QueryClientProvider } from "@tanstack/react-query";\nimport { App } from "./App.tsx";\nimport "./styles.css";\n\nconst client = new QueryClient();\ncreateRoot(document.getElementById("root")!).render(<StrictMode><QueryClientProvider client={client}><App /></QueryClientProvider></StrictMode>);\n`,
-        },
-      ] satisfies ReadonlyArray<GeneratedFile>;
+      ];
     }).pipe(
       Effect.mapError(
         (cause) =>
           new GenerationError({
-            message: "Frontend adapter could not encode JSON",
+            message: "TanStack contract primitive could not encode metadata",
             cause: Option.some(cause),
           }),
       ),
+      Effect.provide(Json.Default),
     ),
+);
+
+export const clientPrimitive = definePrimitive(
+  { id: "client", description: "Render the schema-validating Effect HTTP client" },
+  () => Effect.succeed([{ path: "web/src/api.ts", contents: frontendUnits.renderApiClient() }]),
+);
+
+export const resourceComponentsPrimitive = definePrimitive(
+  { id: "resource-components", description: "Render forms, tables, and resource pages" },
+  () =>
+    Effect.succeed([
+      {
+        path: "web/src/components/ResourceForm.tsx",
+        contents: frontendUnits.renderCreateUpdateForm(),
+      },
+      {
+        path: "web/src/components/ResourceTable.tsx",
+        contents: frontendUnits.renderResourceTable(),
+      },
+      {
+        path: "web/src/components/ResourcePage.tsx",
+        contents: frontendUnits.renderResourcePage(),
+      },
+    ]),
+);
+
+export const applicationPrimitive = definePrimitive(
+  { id: "application", description: "Render the dashboard shell, styles, and entrypoint" },
+  () =>
+    Effect.succeed([
+      { path: "web/src/App.tsx", contents: frontendUnits.renderApplication() },
+      { path: "web/src/styles.css", contents: css },
+      {
+        path: "web/src/main.tsx",
+        contents: `import { StrictMode } from "react";\nimport { createRoot } from "react-dom/client";\nimport { QueryClient, QueryClientProvider } from "@tanstack/react-query";\nimport { App } from "./App.tsx";\nimport "./styles.css";\n\nconst client = new QueryClient();\ncreateRoot(document.getElementById("root")!).render(<StrictMode><QueryClientProvider client={client}><App /></QueryClientProvider></StrictMode>);\n`,
+      },
+    ]),
+);
+
+export const frontendAdapter = defineAdapter({
+  metadata: {
+    id: "tanstack-shadcn",
+    kind: "frontend",
+    displayName: "TanStack/ShadCN",
+    description: "TanStack Query React explorer with ShadCN interaction patterns",
+  },
+  capabilities: completeFrontendCapabilities,
+  units: frontendUnits,
+  primitives: [
+    projectPrimitive,
+    contractsPrimitive,
+    clientPrimitive,
+    resourceComponentsPrimitive,
+    applicationPrimitive,
+  ],
 });

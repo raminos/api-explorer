@@ -1,5 +1,5 @@
 import { Option, Schema } from "effect";
-import type { FieldIr, ResourceIr } from "../ir/model.ts";
+import type { FieldIr, ResourceIr } from "../../ir/model.ts";
 
 const quote = Schema.encodeSync(Schema.parseJson(Schema.String));
 

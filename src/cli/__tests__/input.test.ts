@@ -9,6 +9,8 @@ it.effect("schema-validates every generate command value", () =>
       contractPath: "contract.json",
       output: "generated",
       target: "server",
+      backendAdapter: "effect-bun",
+      frontendAdapter: "tanstack-shadcn",
     });
     expect(valid.target).toBe("server");
 
@@ -17,6 +19,8 @@ it.effect("schema-validates every generate command value", () =>
         contractPath: "contract.json",
         output: "generated",
         target: "unsupported",
+        backendAdapter: "effect-bun",
+        frontendAdapter: "tanstack-shadcn",
       }),
     );
     expect(Either.isLeft(invalid)).toBe(true);

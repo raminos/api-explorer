@@ -5,8 +5,8 @@ import { parseContract } from "../../contract/parse.ts";
 import { compileContract } from "../../ir/compile.ts";
 import { Json } from "../../libraries/json.ts";
 import { RegularExpression } from "../../libraries/regular-expression.ts";
-import { backendAdapter } from "../backend.ts";
-import { frontendAdapter } from "../frontend.ts";
+import { backendAdapter } from "../backend/effect-bun/adapter.ts";
+import { frontendAdapter } from "../frontend/tanstack-shadcn/adapter.ts";
 
 const input = {
   schemaVersion: "1.0",
@@ -38,6 +38,19 @@ it.effect("emits independently consumable backend and frontend layers", () =>
     const ir = yield* parseContract(input).pipe(Effect.flatMap(compileContract));
     const backend = yield* backendAdapter.generate(ir);
     const frontend = yield* frontendAdapter.generate(ir);
+    expect(backendAdapter.primitives.map(({ metadata }) => metadata.id)).toEqual([
+      "project",
+      "models",
+      "operations",
+      "transport",
+    ]);
+    expect(frontendAdapter.primitives.map(({ metadata }) => metadata.id)).toEqual([
+      "project",
+      "contracts",
+      "client",
+      "resource-components",
+      "application",
+    ]);
     expect(backend.map(({ path }) => path)).toContain("server/src/models.ts");
     expect(backend.map(({ path }) => path)).toContain("server/src/server.ts");
     expect(frontend.map(({ path }) => path)).toContain("web/src/components/ResourceForm.tsx");
