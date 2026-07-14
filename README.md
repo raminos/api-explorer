@@ -34,7 +34,7 @@ The server target exposes its schemas, TypeScript types, operation metadata, and
 
 This `0.1.0` scaffold is a working first vertical slice. It supports strict `1.0` contracts, semantic fields, relationships, CRUD/search operation metadata, four pagination strategies, environment-based API-key/bearer authentication, deterministic generation, an Effect/Bun proxy, and a React/TanStack Query dashboard. Contract migrations, richer ShadCN primitives, generated route-specific handlers, and adapter packages are planned next.
 
-Read [the architecture](./doc/architecture.md), [the contract reference](./doc/contract-v1.md), [adapter guide](./doc/adapters.md), and [testing policy](./doc/testing.md).
+Read [the architecture](./doc/architecture.md), [Effect guidelines](./doc/effect-guidelines.md), [the contract reference](./doc/contract-v1.md), [adapter guide](./doc/adapters.md), and [testing policy](./doc/testing.md).
 
 ## Development
 
