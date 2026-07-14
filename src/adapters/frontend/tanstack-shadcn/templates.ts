@@ -146,7 +146,6 @@ export const formTemplate = `import { useState, type FormEvent } from "react";
 import { Array as EffectArray, Option } from "effect";
 import type { ResourceDefinition } from "../resources.ts";
 import { Button } from "./ui/button.tsx";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "./ui/card.tsx";
 import { Input } from "./ui/input.tsx";
 import { Label } from "./ui/label.tsx";
 import { Textarea } from "./ui/textarea.tsx";
@@ -179,26 +178,20 @@ export function ResourceForm({ resource, initial, onCancel, onSubmit }: {
     onSubmit(Object.fromEntries(entries));
   };
 
-  return <Card>
-    <CardHeader>
-      <CardTitle>{Option.isNone(initial) ? "Create" : "Update"} {resource.singularLabel}</CardTitle>
-      <CardDescription>Fields are generated from the validated API contract.</CardDescription>
-    </CardHeader>
-    <form onSubmit={submit}>
-      <CardContent className="grid gap-5 md:grid-cols-2">
-        {writableFields.map((field) => <div className="grid gap-2" key={field.name}>
-          <Label htmlFor={field.name}>{field.label}{field.required ? " *" : ""}</Label>
-          <FieldInput field={field} value={Option.flatMap(initial, (value) => Option.fromNullable(value[field.name]))} />
-          {field.description._tag === "Some" ? <p className="text-xs text-muted-foreground">{field.description.value}</p> : null}
-          {field.nullable ? <Label className="flex items-center gap-2 text-xs font-normal text-muted-foreground"><input name={field.name + "__null"} type="checkbox" /> Set to null</Label> : null}
-        </div>)}
-      </CardContent>
-      <CardFooter className="justify-end gap-2">
-        {Option.match(onCancel, { onNone: () => null, onSome: (cancel) => <Button onClick={cancel} type="button" variant="outline">Cancel</Button> })}
-        <Button type="submit">{Option.isNone(initial) ? "Create" : "Save changes"}</Button>
-      </CardFooter>
-    </form>
-  </Card>;
+  return <form className="grid gap-6" onSubmit={submit}>
+    <div className="grid max-h-[60vh] gap-5 overflow-y-auto px-1 py-1 md:grid-cols-2">
+      {writableFields.map((field) => <div className="grid gap-2" key={field.name}>
+        <Label htmlFor={field.name}>{field.label}{field.required ? " *" : ""}</Label>
+        <FieldInput field={field} value={Option.flatMap(initial, (value) => Option.fromNullable(value[field.name]))} />
+        {field.description._tag === "Some" ? <p className="text-xs text-muted-foreground">{field.description.value}</p> : null}
+        {field.nullable ? <Label className="flex items-center gap-2 text-xs font-normal text-muted-foreground"><input name={field.name + "__null"} type="checkbox" /> Set to null</Label> : null}
+      </div>)}
+    </div>
+    <div className="flex justify-end gap-2 border-t pt-4">
+      {Option.match(onCancel, { onNone: () => null, onSome: (cancel) => <Button onClick={cancel} type="button" variant="outline">Cancel</Button> })}
+      <Button type="submit">{Option.isNone(initial) ? "Create" : "Save changes"}</Button>
+    </div>
+  </form>;
 }
 
 function FieldInput({ field, value }: { readonly field: ResourceDefinition["fields"][number]; readonly value: Option.Option<unknown> }) {
@@ -300,7 +293,7 @@ const renderValue = (value: unknown, field: ResourceDefinition["fields"][number]
 export const pageTemplate = `import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Array as EffectArray, Option } from "effect";
-import { AlertCircle, Braces, Database, RefreshCw } from "lucide-react";
+import { AlertCircle, Braces, Database, Plus, RefreshCw } from "lucide-react";
 import { api, initialPagination, type PageResult, type PaginationState } from "../api.ts";
 import type { PaginationDefinition, ResourceDefinition } from "../resources.ts";
 import { ResourceForm } from "./ResourceForm.tsx";
@@ -309,11 +302,13 @@ import { Alert, AlertDescription, AlertTitle } from "./ui/alert.tsx";
 import { Badge } from "./ui/badge.tsx";
 import { Button } from "./ui/button.tsx";
 import { Card, CardContent } from "./ui/card.tsx";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog.tsx";
 import { Skeleton } from "./ui/skeleton.tsx";
 
 export function ResourcePage({ resource }: { readonly resource: ResourceDefinition }) {
   if (resource.list._tag === "None") throw new Error("Resource " + resource.name + " has no list operation");
   const pagination = resource.list.value.pagination;
+  const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Option.Option<Record<string, unknown>>>(Option.none());
   const [paginationState, setPaginationState] = useState<PaginationState>(() => initialPagination(pagination));
   const [cursorPages, setCursorPages] = useState<ReadonlyArray<{ readonly key: string; readonly rows: ReadonlyArray<Record<string, unknown>> }>>([]);
@@ -327,7 +322,7 @@ export function ResourcePage({ resource }: { readonly resource: ResourceDefiniti
       : [...pages, { key: cursorKey, rows: query.data.rows }]);
   }, [cursorKey, pagination.type, query.data]);
   const refresh = () => queryClient.invalidateQueries({ queryKey: [resource.name] });
-  const create = useMutation({ mutationFn: (input: Record<string, unknown>) => api.create(resource.name, input), onSuccess: refresh });
+  const create = useMutation({ mutationFn: (input: Record<string, unknown>) => api.create(resource.name, input), onSuccess: () => { setCreateOpen(false); refresh(); } });
   const update = useMutation({ mutationFn: ({ id, input }: { readonly id: string; readonly input: Record<string, unknown> }) => api.update(resource.name, id, input), onSuccess: () => { setEditing(Option.none()); refresh(); } });
   const remove = useMutation({ mutationFn: (id: string) => api.remove(resource.name, id), onSuccess: refresh });
   const rows = pagination.type === "cursor" ? cursorPages.flatMap(({ rows: pageRows }) => pageRows) : Option.match(Option.fromNullable(query.data), { onNone: () => [], onSome: ({ rows: pageRows }) => pageRows });
@@ -340,7 +335,16 @@ export function ResourcePage({ resource }: { readonly resource: ResourceDefiniti
           <div className="flex items-center gap-2"><Badge variant="outline"><span className="mr-1.5 size-1.5 rounded-full bg-emerald-500" />Live API</Badge><Badge variant="secondary">GET</Badge></div>
           <div><h1 className="text-3xl font-semibold tracking-tight">{resource.pluralLabel}</h1><p className="mt-1 text-sm text-muted-foreground">Explore schema-validated records from the provider.</p></div>
         </div>
-        <Button disabled={query.isFetching} onClick={() => query.refetch()} variant="outline"><RefreshCw className={query.isFetching ? "animate-spin" : ""} />Refresh</Button>
+        <div className="flex gap-2">
+          <Button disabled={query.isFetching} onClick={() => query.refetch()} variant="outline"><RefreshCw className={query.isFetching ? "animate-spin" : ""} />Refresh</Button>
+          {canCreate ? <Dialog onOpenChange={setCreateOpen} open={createOpen}>
+            <DialogTrigger asChild><Button><Plus />Create {resource.singularLabel}</Button></DialogTrigger>
+            <DialogContent className="sm:max-w-2xl">
+              <DialogHeader><DialogTitle>Create {resource.singularLabel}</DialogTitle><DialogDescription>Fields and validation are generated from the API contract.</DialogDescription></DialogHeader>
+              <ResourceForm initial={Option.none()} onCancel={Option.some(() => setCreateOpen(false))} onSubmit={(input) => create.mutate(input)} resource={resource} />
+            </DialogContent>
+          </Dialog> : null}
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
@@ -349,7 +353,12 @@ export function ResourcePage({ resource }: { readonly resource: ResourceDefiniti
         <Stat icon={<AlertCircle />} label="Validation" value="Strict" />
       </div>
 
-      {canCreate || Option.isSome(editing) ? <ResourceForm key={Option.match(editing, { onNone: () => "create", onSome: (value) => String(value[resource.idField]) })} resource={resource} initial={editing} onCancel={Option.map(editing, () => () => setEditing(Option.none()))} onSubmit={(input) => Option.match(editing, { onNone: () => create.mutate(input), onSome: (value) => update.mutate({ id: String(value[resource.idField]), input }) })} /> : null}
+      <Dialog onOpenChange={(open) => { if (!open) setEditing(Option.none()); }} open={Option.isSome(editing)}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader><DialogTitle>Update {resource.singularLabel}</DialogTitle><DialogDescription>Edit the schema-validated fields for this resource.</DialogDescription></DialogHeader>
+          {Option.match(editing, { onNone: () => null, onSome: (value) => <ResourceForm initial={Option.some(value)} onCancel={Option.some(() => setEditing(Option.none()))} onSubmit={(input) => update.mutate({ id: String(value[resource.idField]), input })} resource={resource} /> })}
+        </DialogContent>
+      </Dialog>
 
       {query.isLoading ? <LoadingTable /> : query.error ? <Alert variant="destructive"><AlertCircle /><AlertTitle>Could not load {resource.pluralLabel.toLowerCase()}</AlertTitle><AlertDescription>{query.error instanceof Error ? query.error.message : "The request failed."}</AlertDescription></Alert>
         : rows.length === 0 ? <Card><CardContent className="flex min-h-48 flex-col items-center justify-center text-center"><Database className="mb-3 size-8 text-muted-foreground" /><p className="font-medium">No records found</p><p className="text-sm text-muted-foreground">The provider returned an empty page.</p></CardContent></Card>
@@ -505,6 +514,10 @@ export const uiFiles: ReadonlyArray<GeneratedFile> = [
   {
     path: "web/src/components/ui/card.tsx",
     contents: `import * as React from "react";\nimport { cn } from "../../lib/utils.ts";\n\nconst Card = ({ className, ...props }: React.ComponentProps<"div">) => <div data-slot="card" className={cn("bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm", className)} {...props} />;\nconst CardHeader = ({ className, ...props }: React.ComponentProps<"div">) => <div data-slot="card-header" className={cn("grid auto-rows-min grid-rows-[auto_auto] items-start gap-1.5 px-6", className)} {...props} />;\nconst CardTitle = ({ className, ...props }: React.ComponentProps<"div">) => <div data-slot="card-title" className={cn("leading-none font-semibold", className)} {...props} />;\nconst CardDescription = ({ className, ...props }: React.ComponentProps<"div">) => <div data-slot="card-description" className={cn("text-muted-foreground text-sm", className)} {...props} />;\nconst CardContent = ({ className, ...props }: React.ComponentProps<"div">) => <div data-slot="card-content" className={cn("px-6", className)} {...props} />;\nconst CardFooter = ({ className, ...props }: React.ComponentProps<"div">) => <div data-slot="card-footer" className={cn("flex items-center px-6", className)} {...props} />;\n\nexport { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter };\n`,
+  },
+  {
+    path: "web/src/components/ui/dialog.tsx",
+    contents: `import * as React from "react";\nimport * as DialogPrimitive from "@radix-ui/react-dialog";\nimport { X } from "lucide-react";\nimport { cn } from "../../lib/utils.ts";\n\nconst Dialog = (props: React.ComponentProps<typeof DialogPrimitive.Root>) => <DialogPrimitive.Root data-slot="dialog" {...props} />;\nconst DialogTrigger = (props: React.ComponentProps<typeof DialogPrimitive.Trigger>) => <DialogPrimitive.Trigger data-slot="dialog-trigger" {...props} />;\nconst DialogPortal = (props: React.ComponentProps<typeof DialogPrimitive.Portal>) => <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />;\nconst DialogClose = (props: React.ComponentProps<typeof DialogPrimitive.Close>) => <DialogPrimitive.Close data-slot="dialog-close" {...props} />;\nconst DialogOverlay = ({ className, ...props }: React.ComponentProps<typeof DialogPrimitive.Overlay>) => <DialogPrimitive.Overlay data-slot="dialog-overlay" className={cn("data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50", className)} {...props} />;\nfunction DialogContent({ className, children, showCloseButton = true, ...props }: React.ComponentProps<typeof DialogPrimitive.Content> & { readonly showCloseButton?: boolean }) { return <DialogPortal><DialogOverlay /><DialogPrimitive.Content data-slot="dialog-content" className={cn("bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-1/2 left-1/2 z-50 grid w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 rounded-lg border p-6 shadow-lg duration-200", className)} {...props}>{children}{showCloseButton ? <DialogPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none"><X className="size-4" /><span className="sr-only">Close</span></DialogPrimitive.Close> : null}</DialogPrimitive.Content></DialogPortal>; }\nconst DialogHeader = ({ className, ...props }: React.ComponentProps<"div">) => <div data-slot="dialog-header" className={cn("flex flex-col gap-2 text-center sm:text-left", className)} {...props} />;\nconst DialogTitle = ({ className, ...props }: React.ComponentProps<typeof DialogPrimitive.Title>) => <DialogPrimitive.Title data-slot="dialog-title" className={cn("text-lg leading-none font-semibold", className)} {...props} />;\nconst DialogDescription = ({ className, ...props }: React.ComponentProps<typeof DialogPrimitive.Description>) => <DialogPrimitive.Description data-slot="dialog-description" className={cn("text-muted-foreground text-sm", className)} {...props} />;\nexport { Dialog, DialogTrigger, DialogPortal, DialogClose, DialogOverlay, DialogContent, DialogHeader, DialogTitle, DialogDescription };\n`,
   },
   {
     path: "web/src/components/ui/input.tsx",

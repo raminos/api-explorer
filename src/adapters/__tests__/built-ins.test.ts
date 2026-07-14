@@ -55,6 +55,7 @@ it.effect("emits independently consumable backend and frontend layers", () =>
     expect(backend.map(({ path }) => path)).toContain("server/src/server.ts");
     expect(frontend.map(({ path }) => path)).toContain("web/src/components/ResourceForm.tsx");
     expect(frontend.map(({ path }) => path)).toContain("web/src/components/ui/table.tsx");
+    expect(frontend.map(({ path }) => path)).toContain("web/src/components/ui/dialog.tsx");
     expect(frontend.map(({ path }) => path)).toContain("web/components.json");
     expect(frontend.map(({ path }) => path)).toContain("web/src/App.tsx");
     const typesFile = EffectArray.findFirst(backend, ({ path }) => path === "server/src/types.ts");
@@ -71,5 +72,6 @@ it.effect("emits independently consumable backend and frontend layers", () =>
       Option.some('Schema.optionalWith(Schema.DateTimeUtc, { as: "Option" })'),
     );
     expect(frontendAdapter.units.renderCreateUpdateForm()).toContain("switch (field.editor)");
+    expect(frontendAdapter.units.renderResourcePage()).toContain("<DialogTrigger asChild>");
   }).pipe(Effect.provide(Json.Default), Effect.provide(RegularExpression.Default)),
 );

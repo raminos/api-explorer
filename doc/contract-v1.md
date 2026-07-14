@@ -58,7 +58,7 @@ Array items are a closed union of string, integer, number, boolean, URL, email, 
 
 Contract 1.0 deliberately rejects arbitrary nested objects and scalar unions other than `null`. Model stable related objects as resources; recursive object schemas and typed file uploads require new exhaustive adapter support before they enter the public contract.
 
-The generated dashboard contains real source-owned shadcn/ui primitives, a valid `components.json`, Tailwind theme tokens, Lucide icons, responsive tables, semantic forms, loading/empty/error states, previous/next controls, and cursor load-more navigation. Markdown, HTML, code, and CSV remain safely displayed as text until dedicated sanitized editors are introduced.
+The generated dashboard contains real source-owned shadcn/ui primitives, a valid `components.json`, Tailwind theme tokens, Lucide icons, responsive tables, create/update dialogs, semantic forms, loading/empty/error states, previous/next controls, and cursor load-more navigation. Markdown, HTML, code, and CSV remain safely displayed as text until dedicated sanitized editors are introduced.
 
 The same generated Effect schemas validate mutation inputs, upstream server responses, and collection items fetched by the browser. Missing response paths, excess resource properties, invalid formatted strings, invalid enum members, and invalid array items fail before reaching UI components.
 

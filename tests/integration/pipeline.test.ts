@@ -18,10 +18,11 @@ it.effect("compiles the example contract through every built-in adapter", () =>
 
     expect(ir.resources.map(({ name }) => name)).toEqual(["breweries"]);
     expect(backend).toHaveLength(8);
-    expect(frontend).toHaveLength(26);
-    expect(new Set([...backend, ...frontend].map(({ path }) => path)).size).toBe(34);
+    expect(frontend).toHaveLength(27);
+    expect(new Set([...backend, ...frontend].map(({ path }) => path)).size).toBe(35);
     expect(frontend.map(({ path }) => path)).toContain("web/components.json");
     expect(frontend.map(({ path }) => path)).toContain("web/src/components/ui/button.tsx");
+    expect(frontend.map(({ path }) => path)).toContain("web/src/components/ui/dialog.tsx");
   }).pipe(Effect.provide(Json.Default), Effect.provide(RegularExpression.Default)),
 );
 

@@ -81,6 +81,7 @@ export const projectPrimitive = definePrimitive(
           scripts: { dev: "vite", build: "tsc --noEmit && vite build" },
           dependencies: {
             "@effect/platform": "0.97.0",
+            "@radix-ui/react-dialog": "1.1.19",
             "@radix-ui/react-label": "2.1.11",
             "@radix-ui/react-slot": "1.3.0",
             "@tailwindcss/vite": "4.3.2",
