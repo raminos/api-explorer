@@ -9,9 +9,12 @@
   "scripts": {
     "check": "bun run check:types && bun run check:biome && bun run test",
     "check:biome": "biome check .",
+    "check:commit": "bun run check && bun run check:generated",
+    "check:generated": "bun run src/verification/verify-generated.ts",
     "check:types": "tsc --noEmit",
     "format": "biome check --write .",
     "generate:example": "bun run src/cli.ts generate examples/jsonplaceholder/api-explorer.json --output .generated/jsonplaceholder",
+    "prepare": "lefthook install",
     "start": "bun run src/cli.ts",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -26,6 +29,7 @@
     "@biomejs/biome": "2.5.3",
     "@effect/vitest": "0.30.0",
     "@types/bun": "1.3.14",
+    "lefthook": "2.1.10",
     "typescript": "5.9.3",
     "vitest": "3.2.4"
   },

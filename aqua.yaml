@@ -5,3 +5,4 @@ registries:
 packages:
   - name: oven-sh/bun@bun-v1.3.13
   - name: biomejs/biome@@biomejs/biome@2.5.3
+  - name: evilmartians/lefthook@v2.1.10
