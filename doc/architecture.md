@@ -30,6 +30,8 @@ This layout supports three adoption levels: take individual types/components, in
 
 The input boundary is `unknown`. Effect Schema performs structural validation with excess-property rejection. The IR compiler performs checks that require knowledge of multiple resources. Generated server mutation bodies are decoded again before reaching the upstream API. TypeScript uses strict mode, exact optional properties, unchecked indexed-access protection, and no implicit fallthrough or returns.
 
+JSON may omit properties that the contract declares optional. Decoding immediately materializes those values as `Option`; the IR requires `Option` explicitly and generated metadata uses an equivalent tagged `Maybe`. `undefined` does not cross into domain or application code. This makes absence visible in every type and forces consumers to handle both cases.
+
 Generated servers use Effect HTTP routing/client services, `Config`, redacted secrets, structured logging, and Bun layers. Generated browser clients use Effect's fetch HTTP client and cross into Promise only where TanStack Query requires it.
 
 Secrets are never stored in a contract. Authentication configuration names an environment variable, and generated servers read and inject it at runtime without logging its value.

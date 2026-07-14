@@ -40,3 +40,5 @@ Every field declares `required` and may declare `readOnly`, `nullable`, and a de
 The current dashboard implements lightweight native controls for these editor choices. The IR deliberately preserves richer intent so a ShadCN adapter can replace individual controls without changing contracts.
 
 Unknown JSON keys are errors. This prevents a misspelled constraint from silently weakening validation or changing generated behavior.
+
+Optional JSON properties describe the wire format only. Effect Schema decodes each omitted property into `Option.none`; present values become `Option.some`. The compiler and IR never represent domain absence with `undefined`, so downstream adapters must handle absence explicitly.

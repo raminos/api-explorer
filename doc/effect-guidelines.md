@@ -10,6 +10,7 @@ Effect is the application model, not an error-handling utility added at the edge
 - Recoverable failures are typed errors. Defects represent violated internal invariants or an adapter declaration that cannot be implemented.
 - JSON parsing at schema boundaries uses `Schema.parseJson`. Other native or third-party calls that can throw live in `src/libraries` and return `Effect`.
 - Library wrappers preserve the original call surface with `Parameters<typeof fn>` or `ConstructorParameters<typeof Class>` instead of inventing a wider abstraction.
+- Optional wire properties decode to `Option`. Domain and application types do not use `undefined` to represent absence.
 
 ## Time and nondeterminism
 
