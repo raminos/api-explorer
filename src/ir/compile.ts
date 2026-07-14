@@ -1,6 +1,7 @@
-import { Effect } from "effect";
+import { Effect, ParseResult, Schema } from "effect";
 import type { ApiContractV1, ContractField } from "../contract/schema.ts";
 import { ContractValidationError } from "../domain/errors.ts";
+import { RegularExpression } from "../libraries/regular-expression.ts";
 import type {
   ApiIr,
   EditorKind,
@@ -9,6 +10,12 @@ import type {
   PaginationIr,
   ResourceIr,
 } from "./model.ts";
+import { ApiIrSchema } from "./model.ts";
+
+const decodeApiIr = Schema.decodeUnknown(ApiIrSchema, {
+  errors: "all",
+  onExcessProperty: "error",
+});
 
 const duplicates = (values: ReadonlyArray<string>): ReadonlyArray<string> => {
   const seen = new Set<string>();
@@ -69,7 +76,7 @@ const fieldToIr = (field: ContractField): FieldIr => {
   return {
     name: field.name,
     label: field.label,
-    description: field.description,
+    ...(field.description === undefined ? {} : { description: field.description }),
     kind: field.type,
     editor: editorFor(field),
     required: field.required,
@@ -77,8 +84,9 @@ const fieldToIr = (field: ContractField): FieldIr => {
     nullable: field.nullable ?? false,
     constraints,
     enumValues: field.type === "enum" ? field.values : [],
-    referencedResource: field.type === "reference" ? field.resource : undefined,
-    referenceValueKind: field.type === "reference" ? field.valueType : undefined,
+    ...(field.type === "reference"
+      ? { referencedResource: field.resource, referenceValueKind: field.valueType }
+      : {}),
   };
 };
 
@@ -87,45 +95,42 @@ const paginationToIr = (
     | ApiContractV1["resources"][number]["operations"]["list"]
     | ApiContractV1["resources"][number]["operations"]["search"],
 ): PaginationIr => {
-  if (pagination === undefined) return { type: "none", parameters: {} };
+  if (pagination === undefined) return { type: "none" };
   const value = pagination.pagination;
   switch (value.type) {
     case "none":
-      return { type: "none", parameters: {} };
+      return { type: "none" };
     case "offset":
       return {
         type: "offset",
-        parameters: {
-          offsetParameter: value.offsetParameter,
-          limitParameter: value.limitParameter,
-          defaultLimit: value.defaultLimit,
-        },
+        offsetParameter: value.offsetParameter,
+        limitParameter: value.limitParameter,
+        defaultLimit: value.defaultLimit,
       };
     case "cursor":
       return {
         type: "cursor",
-        parameters: {
-          cursorParameter: value.cursorParameter,
-          limitParameter: value.limitParameter,
-          nextCursorPath: value.nextCursorPath,
-          itemsPath: value.itemsPath,
-          defaultLimit: value.defaultLimit,
-        },
+        cursorParameter: value.cursorParameter,
+        limitParameter: value.limitParameter,
+        nextCursorPath: value.nextCursorPath,
+        itemsPath: value.itemsPath,
+        defaultLimit: value.defaultLimit,
       };
     case "page":
       return {
         type: "page",
-        parameters: {
-          pageParameter: value.pageParameter,
-          sizeParameter: value.sizeParameter,
-          defaultSize: value.defaultSize,
-        },
+        pageParameter: value.pageParameter,
+        sizeParameter: value.sizeParameter,
+        defaultSize: value.defaultSize,
       };
   }
 };
 
-const validateSemantics = (contract: ApiContractV1): Effect.Effect<void, ContractValidationError> =>
+const validateSemantics = (
+  contract: ApiContractV1,
+): Effect.Effect<void, ContractValidationError, RegularExpression> =>
   Effect.gen(function* () {
+    const regularExpression = yield* RegularExpression;
     const duplicateResources = duplicates(contract.resources.map(({ name }) => name));
     if (duplicateResources.length > 0) {
       return yield* new ContractValidationError({
@@ -150,15 +155,15 @@ const validateSemantics = (contract: ApiContractV1): Effect.Effect<void, Contrac
       for (const field of resource.fields) {
         if ("pattern" in field && field.pattern !== undefined) {
           const pattern = field.pattern;
-          const validPattern = Effect.try({
-            try: () => new RegExp(pattern),
-            catch: (cause) =>
-              new ContractValidationError({
-                message: `Field ${resource.name}.${field.name} has an invalid regular expression`,
-                cause,
-              }),
-          });
-          yield* validPattern;
+          yield* regularExpression.compile(pattern).pipe(
+            Effect.mapError(
+              (cause) =>
+                new ContractValidationError({
+                  message: `Field ${resource.name}.${field.name} has an invalid regular expression`,
+                  cause,
+                }),
+            ),
+          );
         }
         if (field.type === "reference" && !resources.has(field.resource)) {
           return yield* new ContractValidationError({
@@ -223,16 +228,28 @@ const resourceToIr = (resource: ApiContractV1["resources"][number]): ResourceIr 
 
 export const compileContract = (
   contract: ApiContractV1,
-): Effect.Effect<ApiIr, ContractValidationError> =>
+): Effect.Effect<ApiIr, ContractValidationError, RegularExpression> =>
   validateSemantics(contract).pipe(
-    Effect.as({
-      schemaVersion: contract.schemaVersion,
-      api: {
-        name: contract.api.name,
-        description: contract.api.description,
-        baseUrl: contract.api.baseUrl,
-        auth: contract.api.auth,
-      },
-      resources: contract.resources.map(resourceToIr),
-    }),
+    Effect.flatMap(() =>
+      decodeApiIr({
+        schemaVersion: contract.schemaVersion,
+        api: {
+          name: contract.api.name,
+          ...(contract.api.description === undefined
+            ? {}
+            : { description: contract.api.description }),
+          baseUrl: contract.api.baseUrl,
+          auth: contract.api.auth,
+        },
+        resources: contract.resources.map(resourceToIr),
+      }).pipe(
+        Effect.mapError(
+          (cause) =>
+            new ContractValidationError({
+              message: `Internal representation validation failed: ${ParseResult.TreeFormatter.formatErrorSync(cause)}`,
+              cause,
+            }),
+        ),
+      ),
+    ),
   );

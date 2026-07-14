@@ -1,109 +1,156 @@
-export type FieldKind =
-  | "string"
-  | "markdown"
-  | "html"
-  | "csv"
-  | "url"
-  | "email"
-  | "date"
-  | "time"
-  | "datetime"
-  | "integer"
-  | "number"
-  | "boolean"
-  | "enum"
-  | "reference";
+import { Schema } from "effect";
 
-export type EditorKind =
-  | "text"
-  | "textarea"
-  | "markdown"
-  | "richText"
-  | "table"
-  | "url"
-  | "email"
-  | "date"
-  | "time"
-  | "datetime"
-  | "number"
-  | "checkbox"
-  | "select"
-  | "resourceSelect";
+export const FieldKindSchema = Schema.Literal(
+  "string",
+  "markdown",
+  "html",
+  "csv",
+  "url",
+  "email",
+  "date",
+  "time",
+  "datetime",
+  "integer",
+  "number",
+  "boolean",
+  "enum",
+  "reference",
+);
+export type FieldKind = typeof FieldKindSchema.Type;
 
-export interface FieldConstraints {
-  readonly minLength?: number;
-  readonly maxLength?: number;
-  readonly pattern?: string;
-  readonly minimum?: number;
-  readonly maximum?: number;
-}
+export const EditorKindSchema = Schema.Literal(
+  "text",
+  "textarea",
+  "markdown",
+  "richText",
+  "table",
+  "url",
+  "email",
+  "date",
+  "time",
+  "datetime",
+  "number",
+  "checkbox",
+  "select",
+  "resourceSelect",
+);
+export type EditorKind = typeof EditorKindSchema.Type;
 
-export interface FieldIr {
-  readonly name: string;
-  readonly label: string;
-  readonly description: string | undefined;
-  readonly kind: FieldKind;
-  readonly editor: EditorKind;
-  readonly required: boolean;
-  readonly readOnly: boolean;
-  readonly nullable: boolean;
-  readonly constraints: FieldConstraints;
-  readonly enumValues: ReadonlyArray<{ readonly value: string; readonly label: string }>;
-  readonly referencedResource: string | undefined;
-  readonly referenceValueKind: "string" | "integer" | undefined;
-}
+export const FieldConstraintsSchema = Schema.Struct({
+  minLength: Schema.optional(Schema.Number.pipe(Schema.int(), Schema.nonNegative())),
+  maxLength: Schema.optional(Schema.Number.pipe(Schema.int(), Schema.positive())),
+  pattern: Schema.optional(Schema.String),
+  minimum: Schema.optional(Schema.Number),
+  maximum: Schema.optional(Schema.Number),
+});
+export type FieldConstraints = typeof FieldConstraintsSchema.Type;
 
-export interface OperationIr {
-  readonly method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-  readonly path: string;
-}
+export const FieldIrSchema = Schema.Struct({
+  name: Schema.String,
+  label: Schema.String,
+  description: Schema.optional(Schema.String),
+  kind: FieldKindSchema,
+  editor: EditorKindSchema,
+  required: Schema.Boolean,
+  readOnly: Schema.Boolean,
+  nullable: Schema.Boolean,
+  constraints: FieldConstraintsSchema,
+  enumValues: Schema.Array(Schema.Struct({ value: Schema.String, label: Schema.String })),
+  referencedResource: Schema.optional(Schema.String),
+  referenceValueKind: Schema.optional(Schema.Literal("string", "integer")),
+});
+export type FieldIr = typeof FieldIrSchema.Type;
 
-export interface PaginationIr {
-  readonly type: "none" | "offset" | "cursor" | "page";
-  readonly parameters: Readonly<Record<string, number | string>>;
-}
+export const OperationIrSchema = Schema.Struct({
+  method: Schema.Literal("GET", "POST", "PUT", "PATCH", "DELETE"),
+  path: Schema.String,
+});
+export type OperationIr = typeof OperationIrSchema.Type;
 
-export interface ResourceIr {
-  readonly name: string;
-  readonly singularLabel: string;
-  readonly pluralLabel: string;
-  readonly idField: string;
-  readonly fields: ReadonlyArray<FieldIr>;
-  readonly operations: {
-    readonly list?: OperationIr & { readonly pagination: PaginationIr };
-    readonly get?: OperationIr;
-    readonly create?: OperationIr;
-    readonly update?: OperationIr;
-    readonly delete?: OperationIr;
-    readonly search?: OperationIr & {
-      readonly queryParameter: string;
-      readonly pagination: PaginationIr;
-    };
-  };
-  readonly relationships: ReadonlyArray<{
-    readonly name: string;
-    readonly kind: "belongsTo" | "hasMany";
-    readonly resource: string;
-    readonly localField: string;
-    readonly foreignField: string;
-  }>;
-}
+export const PaginationIrSchema = Schema.Union(
+  Schema.Struct({ type: Schema.Literal("none") }),
+  Schema.Struct({
+    type: Schema.Literal("offset"),
+    offsetParameter: Schema.String,
+    limitParameter: Schema.String,
+    defaultLimit: Schema.Number.pipe(Schema.int(), Schema.positive()),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("cursor"),
+    cursorParameter: Schema.String,
+    limitParameter: Schema.String,
+    nextCursorPath: Schema.String,
+    itemsPath: Schema.String,
+    defaultLimit: Schema.Number.pipe(Schema.int(), Schema.positive()),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("page"),
+    pageParameter: Schema.String,
+    sizeParameter: Schema.String,
+    defaultSize: Schema.Number.pipe(Schema.int(), Schema.positive()),
+  }),
+);
+export type PaginationIr = typeof PaginationIrSchema.Type;
 
-export interface ApiIr {
-  readonly schemaVersion: "1.0";
-  readonly api: {
-    readonly name: string;
-    readonly description: string | undefined;
-    readonly baseUrl: string;
-    readonly auth:
-      | { readonly type: "none" }
-      | {
-          readonly type: "apiKey";
-          readonly location: "header" | "query";
-          readonly name: string;
-          readonly environmentVariable: string;
-        }
-      | { readonly type: "bearer"; readonly environmentVariable: string };
-  };
-  readonly resources: ReadonlyArray<ResourceIr>;
-}
+const ListOperationIrSchema = Schema.Struct({
+  ...OperationIrSchema.fields,
+  pagination: PaginationIrSchema,
+});
+
+const SearchOperationIrSchema = Schema.Struct({
+  ...OperationIrSchema.fields,
+  queryParameter: Schema.String,
+  pagination: PaginationIrSchema,
+});
+
+export const RelationshipIrSchema = Schema.Struct({
+  name: Schema.String,
+  kind: Schema.Literal("belongsTo", "hasMany"),
+  resource: Schema.String,
+  localField: Schema.String,
+  foreignField: Schema.String,
+});
+
+export const ResourceIrSchema = Schema.Struct({
+  name: Schema.String,
+  singularLabel: Schema.String,
+  pluralLabel: Schema.String,
+  idField: Schema.String,
+  fields: Schema.Array(FieldIrSchema),
+  operations: Schema.Struct({
+    list: Schema.optional(ListOperationIrSchema),
+    get: Schema.optional(OperationIrSchema),
+    create: Schema.optional(OperationIrSchema),
+    update: Schema.optional(OperationIrSchema),
+    delete: Schema.optional(OperationIrSchema),
+    search: Schema.optional(SearchOperationIrSchema),
+  }),
+  relationships: Schema.Array(RelationshipIrSchema),
+});
+export type ResourceIr = typeof ResourceIrSchema.Type;
+
+export const AuthIrSchema = Schema.Union(
+  Schema.Struct({ type: Schema.Literal("none") }),
+  Schema.Struct({
+    type: Schema.Literal("apiKey"),
+    location: Schema.Literal("header", "query"),
+    name: Schema.String,
+    environmentVariable: Schema.String,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("bearer"),
+    environmentVariable: Schema.String,
+  }),
+);
+
+export const ApiIrSchema = Schema.Struct({
+  schemaVersion: Schema.Literal("1.0"),
+  api: Schema.Struct({
+    name: Schema.String,
+    description: Schema.optional(Schema.String),
+    baseUrl: Schema.String,
+    auth: AuthIrSchema,
+  }),
+  resources: Schema.Array(ResourceIrSchema),
+});
+export type ApiIr = typeof ApiIrSchema.Type;

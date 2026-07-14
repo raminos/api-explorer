@@ -8,16 +8,22 @@ const decodeContract = Schema.decodeUnknown(ApiContractV1Schema, {
   onExcessProperty: "error",
 });
 
+const decodeContractJson = Schema.decodeUnknown(Schema.parseJson(ApiContractV1Schema), {
+  errors: "all",
+  onExcessProperty: "error",
+});
+
+const mapParseError = (cause: ParseResult.ParseError) =>
+  new ContractValidationError({
+    message: ParseResult.TreeFormatter.formatErrorSync(cause),
+    cause,
+  });
+
 export const parseContract = (input: unknown) =>
-  decodeContract(input).pipe(
-    Effect.mapError(
-      (cause) =>
-        new ContractValidationError({
-          message: ParseResult.TreeFormatter.formatErrorSync(cause),
-          cause,
-        }),
-    ),
-  );
+  decodeContract(input).pipe(Effect.mapError(mapParseError));
+
+export const parseContractJson = (input: string) =>
+  decodeContractJson(input).pipe(Effect.mapError(mapParseError));
 
 export const readContract = (path: string) =>
   Effect.gen(function* () {
@@ -25,10 +31,5 @@ export const readContract = (path: string) =>
     const contents = yield* fs
       .readFileString(path)
       .pipe(Effect.mapError((cause) => new ContractReadError({ path, cause })));
-    const json = yield* Effect.try({
-      try: () => JSON.parse(contents) as unknown,
-      catch: (cause) =>
-        new ContractValidationError({ message: "Contract is not valid JSON", cause }),
-    });
-    return yield* parseContract(json);
+    return yield* parseContractJson(contents);
   });

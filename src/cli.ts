@@ -7,6 +7,7 @@ import { backendAdapter } from "./generator/backend.ts";
 import { frontendAdapter } from "./generator/frontend.ts";
 import { writeGeneratedFiles } from "./generator/write.ts";
 import { compileContract } from "./ir/compile.ts";
+import { RegularExpression } from "./libraries/regular-expression.ts";
 
 const contractPath = Args.text({ name: "contract" });
 const output = Options.text("output").pipe(
@@ -47,4 +48,9 @@ const command = Command.make("api-explorer", {}).pipe(
 
 const cli = Command.run(command, { name: "API Explorer", version: "0.1.0" });
 
-BunRuntime.runMain(cli(process.argv).pipe(Effect.provide(BunContext.layer)));
+BunRuntime.runMain(
+  cli(process.argv).pipe(
+    Effect.provide(RegularExpression.Default),
+    Effect.provide(BunContext.layer),
+  ),
+);

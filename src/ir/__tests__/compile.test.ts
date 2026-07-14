@@ -2,6 +2,7 @@ import { it } from "@effect/vitest";
 import { Effect, Either } from "effect";
 import { expect } from "vitest";
 import { parseContract } from "../../contract/parse.ts";
+import { RegularExpression } from "../../libraries/regular-expression.ts";
 import { compileContract } from "../compile.ts";
 
 const contract = {
@@ -28,7 +29,7 @@ it.effect("normalizes semantic fields into editor metadata", () =>
     const ir = yield* compileContract(parsed);
     expect(ir.resources[0]?.fields[1]?.editor).toBe("markdown");
     expect(ir.resources[0]?.fields[1]?.constraints).toEqual({ maxLength: 1000 });
-  }),
+  }).pipe(Effect.provide(RegularExpression.Default)),
 );
 
 it.effect("rejects an ID field that does not exist", () =>
@@ -40,5 +41,5 @@ it.effect("rejects an ID field that does not exist", () =>
     const result = yield* Effect.either(compileContract(parsed));
     expect(Either.isLeft(result)).toBe(true);
     if (Either.isLeft(result)) expect(result.left.message).toContain("unknown idField missing");
-  }),
+  }).pipe(Effect.provide(RegularExpression.Default)),
 );
