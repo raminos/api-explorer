@@ -7,6 +7,8 @@ Generate a composable Effect/Bun API server and TanStack Query explorer from one
 
 API Explorer models resources, CRUD and search operations, authentication, pagination, relationships, validation constraints, and semantic UI types such as Markdown, HTML, CSV, enums, dates, and references. The contract is decoded with Effect Schema, compiled into a schema-validated IR, and rendered by exhaustive backend and frontend adapters.
 
+Start with the runnable [JSONPlaceholder contract](./examples/jsonplaceholder/api-explorer.json). The [showcase contract](./examples/showcase/api-explorer.json) demonstrates every supported field, header source, nullable value, array, and pagination strategy.
+
 ## Start in under a minute
 
 You need [Bun 1.3.13](https://bun.sh/) or [aqua](https://aquaproj.github.io/) with the checked-in [`aqua.yaml`](./aqua.yaml).
@@ -29,6 +31,8 @@ cd .generated/jsonplaceholder/server
 bun install
 bun run start
 ```
+
+Generate the complete semantic showcase with `bun run generate:showcase`.
 
 In another terminal:
 
@@ -59,7 +63,7 @@ Every argument and option is parsed by Effect CLI and decoded again through the 
 | Target | Independently consumable output |
 | --- | --- |
 | Effect/Bun server | schemas, transfer types, operation manifest, library boundaries, transport, server entrypoint |
-| TanStack web app | transfer types, resource metadata, Effect HTTP client, form, table, resource page, application shell |
+| TanStack web app | runtime schemas, transfer types, resource metadata, Effect HTTP client, semantic forms, tables, pagination, resource page, application shell |
 
 Use a complete generated application or take only the types, schemas, client, form, table, or page needed by an existing project.
 

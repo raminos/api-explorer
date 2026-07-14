@@ -28,7 +28,7 @@ This layout supports three adoption levels: take individual types/components, in
 
 ## Safety model
 
-The input boundary is `unknown`. Effect Schema performs structural validation with excess-property rejection. The IR compiler performs checks that require knowledge of multiple resources. Generated server mutation bodies are decoded again before reaching the upstream API. TypeScript uses strict mode, exact optional properties, unchecked indexed-access protection, and no implicit fallthrough or returns.
+The input boundary is `unknown`. Effect Schema performs structural validation with excess-property rejection. The IR compiler performs checks that require knowledge of multiple resources. Generated server mutation bodies are decoded before reaching the upstream API. Upstream item and collection responses are decoded before the proxy returns them, and the browser independently decodes collection items before rendering. TypeScript uses strict mode, exact optional properties, unchecked indexed-access protection, and no implicit fallthrough or returns.
 
 JSON may omit properties that the contract declares optional. Decoding immediately materializes those values as `Option`; the IR requires `Option` explicitly and generated metadata uses an equivalent tagged `Maybe`. `undefined` does not cross into domain or application code. This makes absence visible in every type and forces consumers to handle both cases.
 

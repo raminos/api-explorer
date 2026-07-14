@@ -2,16 +2,17 @@
 
 ## 0.2 — production adapter foundations
 
-- Route-specific Effect HTTP API handlers and response schemas
+- Route-specific Effect HTTP API handlers
 - Contract migration registry and JSON Schema export
 - Dry-run, overwrite policy, and generated-file manifest
+- Recursive object fields and typed file-upload transport
 - Golden compilation tests for generated packages
 
 ## 0.3 — richer explorer UI
 
 - TanStack Router/Start application target
-- ShadCN component adapter with accessible specialized editors
-- Relationship browsing, filters, cursor navigation, optimistic updates, and update dialogs
+- ShadCN component extraction with accessible rich editors
+- Relationship browsing, filters, optimistic updates, and update dialogs
 - Markdown/HTML sanitization and CSV table editing
 
 ## Later

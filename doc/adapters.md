@@ -17,7 +17,7 @@ interface GeneratorAdapter {
 }
 ```
 
-Backend units separately render field schemas, data models, transfer types, endpoint manifests, and transport/application code. Frontend units separately render transfer types, resource metadata, the API client, create/update form, table, page, and application shell. The built-in adapters compose these same public units; they are not documentation-only hooks.
+Schema rendering is a shared atomic unit used by both built-in targets. Backend units separately render data models, transfer types, endpoint manifests, and transport/application code. Frontend units separately render transfer types, runtime schemas, resource metadata, the API client, create/update form, table, pagination controls, page, and application shell. The built-in adapters compose these same public units; they are not documentation-only hooks.
 
 Keep rendering pure except for injected library services: return relative paths and contents, and let `writeGeneratedFiles` perform filesystem effects. Stable output makes adapters straightforward to unit test and allows a future dry-run/diff workflow.
 
