@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Array as EffectArray, Option } from "effect";
 import { expect } from "vitest";
 import { parseContract } from "../../contract/parse.ts";
 import { ContractCompiler } from "../contract-compiler.ts";
@@ -22,6 +22,8 @@ it.effect("compiles through an injectable use-case service", () =>
       ],
     });
     const api = yield* compiler.compile(contract);
-    expect(api.resources[0]?.name).toBe("items");
+    expect(Option.map(EffectArray.get(api.resources, 0), ({ name }) => name)).toEqual(
+      Option.some("items"),
+    );
   }).pipe(Effect.provide(ContractCompiler.Default)),
 );

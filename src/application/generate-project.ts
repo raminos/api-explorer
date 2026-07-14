@@ -5,8 +5,8 @@ import { AdapterRegistry, GenerationTargetSchema } from "./adapter-registry.ts";
 import { ContractCompiler } from "./contract-compiler.ts";
 
 export const GenerateProjectInputSchema = Schema.Struct({
-  contractPath: Schema.String.pipe(Schema.minLength(1)),
-  output: Schema.String.pipe(Schema.minLength(1)),
+  contractPath: Schema.NonEmptyTrimmedString,
+  output: Schema.NonEmptyTrimmedString,
   target: GenerationTargetSchema,
 });
 export type GenerateProjectInput = typeof GenerateProjectInputSchema.Type;
